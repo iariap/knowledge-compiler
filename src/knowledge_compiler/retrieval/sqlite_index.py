@@ -12,6 +12,7 @@ class SqliteChunkIndex:
     def rebuild(self, chunks: list[Chunk]) -> int:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self._database_path) as connection:
+            connection.execute("DROP TABLE IF EXISTS chunks")
             connection.execute("DROP TABLE IF EXISTS chunks_fts")
             connection.execute(
                 """
