@@ -14,7 +14,7 @@ The product is a **local-first knowledge compiler**: it ingests source material,
 
 **In scope for this TRD:** batch ingest (local paths, **HTTP(S) URL fetch**, X bookmarks), compile, SQLite FTS indexing, explicit retrieval (`EvidencePack`) with optional **embedding rerank** over the FTS candidate pool, bounded context assembly (`ContextPack`) with character and optional **tiktoken** token caps, grounded `ask` (heuristic default, optional LLM wording, same retrieval/context options as `context`), workspace persistence layout, CLI behavior, environment configuration, and traceability hooks (`inspect`, `trace`, `runs`).
 
-**Explicitly out of scope for the current slice:** hosted multi-tenant services, plugin marketplaces, vector databases, graph query engines, background job runners, web UI, broad connector ecosystems, and tokenizer-accurate model context planning. These exclusions are deliberate product boundaries unless/until the roadmap changes.
+**Explicitly out of scope for the current slice:** hosted multi-tenant services, plugin marketplaces, vector databases, graph query engines, background job runners, web UI, broad connector ecosystems, and **end-to-end prompt assembly / multi-step context planning** across arbitrary models and tools (the product may still apply **optional `tiktoken`-based caps** on the bounded context pack, as in §10). These exclusions are deliberate product boundaries unless/until the roadmap changes.
 
 ---
 
@@ -79,7 +79,7 @@ No inbound network surface is required for core operation; network use is opt-in
 
 **WR1 — Project root resolution.** The effective project root SHALL be resolved in order: CLI `--project-root` / `-p`, then environment variable `KNOWLEDGE_COMPILER_ROOT`, then current working directory.
 
-**WR2 — Environment loading.** On CLI startup, a `.env` file SHALL be loaded from the resolved project root via `python-dotenv`, without overwriting variables already set in the process environment.
+**WR2 — Environment loading.** On CLI startup, `python-dotenv` SHALL load the first existing `.env` using the same directory precedence as the project root: if `--project-root` / `-p` is passed, from that directory; else if `KNOWLEDGE_COMPILER_ROOT` is set, from that directory; else from the current working directory (`knowledge_compiler.env_file.resolve_dotenv_path`). Variables already set in the process environment SHALL NOT be overwritten.
 
 **WR3 — Workspace directories.** Under `workspace/`, the system SHALL use:
 
@@ -88,7 +88,7 @@ No inbound network surface is required for core operation; network use is opt-in
 - `compiled/` — compile outputs (Markdown topics, JSON/L manifests).
 - `indexes/` — `retrieval.db` (SQLite FTS5).
 
-**WR4 — Multi-source ingest.** When `ingest`, **`ingest-url`**, or `ingest-x-bookmarks` runs with **`--merge`**, rows for other `source_id` values SHALL be preserved; the incoming connector replaces only its own source’s documents and chunks. Without `--merge`, the normalized bundle for state files written by ingest SHALL represent the single ingest run (replacement behavior).
+**WR4 — Multi-source ingest.** When `ingest`, **`ingest-url`**, or `ingest-x-bookmarks` runs with **`--merge`**, rows for other `source_id` values SHALL be preserved; the incoming connector replaces only its own source’s documents and chunks. **Per-connector snapshot:** for a given `source_id`, each such run SHALL drop **all** prior documents and chunks for that `source_id` and then persist **only** the documents produced by **this** invocation (e.g. `ingest-url --merge` with two URLs replaces the entire prior **`url-fetch`** corpus with those two URL documents—it does not accumulate URLs across separate CLI runs). Without `--merge`, the normalized bundle for state files written by ingest SHALL represent the single ingest run (replacement of the whole workspace state for ingest-owned files).
 
 ---
 
@@ -141,7 +141,7 @@ No inbound network surface is required for core operation; network use is opt-in
 
 ## 10. Functional requirements — retrieval and query-time
 
-**RET1 — Tokenization consistency.** Query text SHALL be tokenized with the same Unicode-aware rules for FTS match expression building, lexical overlap scoring, and heuristic answer sentence selection (`retrieval/query_tokens.py`).
+**RET1 — Tokenization consistency.** Query text SHALL be tokenized with the same Unicode-aware rules for FTS match expression building, lexical overlap scoring, and heuristic answer sentence selection (`retrieval/query_tokens.py`). If normalization removes all query tokens, the FTS match expression is empty and retrieval SHALL yield no hits.
 
 **RET2 — Match modes.** Retrieval SHALL support combining remaining query terms with FTS **AND** (default) or **OR** when `--match and|or` is set, mapped to `MatchMode`.
 
@@ -155,7 +155,7 @@ No inbound network surface is required for core operation; network use is opt-in
 
 **RET6 — ContextPack.** `context` (and the context stage of `ask`) SHALL build a `ContextPack` with base selection strategy **`query-aware-multi-snippet-v2`**, append **`+token_cap`** when `--max-tokens` is set, enforce `--max-chars` (50–20,000 on CLI), prefer query-aware sentence-level snippets from evidence hits, and deduplicate normalized snippet bodies. Token measurement SHALL use **`tiktoken` encoding `cl100k_base`** via `context/token_counter.py` when the encoder loads successfully; on encoder failure the same module SHALL fall back to a character heuristic (~4 chars per token). The pack SHALL set `estimated_input_tokens` from per-snippet token counts plus overhead. When `max_tokens` is set, each accepted snippet SHALL be clipped to fit the remaining token budget (including a small per-snippet overhead modeled in code). Persisted fields SHALL include `max_tokens`, `used_tokens`, and the usual `used_chars` / `max_chars`. Output SHALL be written to `workspace/state/last-context-pack.json`.
 
-**RET7 — Query run history.** Each `retrieve`, `context`, and `ask` invocation SHALL append a `QueryRun` record to `workspace/state/query-runs.jsonl` with stable `run_id`, timestamps, counts, and optional context/answer fields as implemented in `services/runs.py`.
+**RET7 — Query run history.** Each `retrieve`, `context`, and `ask` invocation SHALL append a `QueryRun` record to `workspace/state/query-runs.jsonl` with stable `run_id` (UUID-based suffix), timestamps, counts, and optional context/answer fields as implemented in `services/runs.py`. **Not persisted** in `QueryRun` today: `match_mode`, `--embed-rerank`, `ranking_strategy`, `--max-tokens`, `used_tokens`, `synthesis`, and other CLI flags—full retrieval settings are only recoverable from **`last-evidence-pack.json`** / **`last-context-pack.json`** / **`last-answer.json`** when those commands have been run for the same query workflow.
 
 ---
 
@@ -172,7 +172,7 @@ No inbound network surface is required for core operation; network use is opt-in
 
 **ASK4 — Last answer persistence.** `ask` SHALL write `workspace/state/last-answer.json` as a serialized `QueryAnswer`.
 
-**ASK5 — Trace.** `trace` without `--run` SHALL replay `last-answer.json` and load cited chunk bodies from `chunks.jsonl`. `trace --run <id>` SHALL resolve an `ask` entry from `query-runs.jsonl` by exact or unique prefix, require stored `citation_chunk_ids`, and reconstruct citations and chunk text accordingly.
+**ASK5 — Trace.** `trace` without `--run` SHALL replay `last-answer.json` and load cited chunk bodies from `chunks.jsonl`. `trace --run <id>` SHALL resolve an `ask` entry from `query-runs.jsonl` by exact or unique prefix, require stored `citation_chunk_ids`, and reconstruct citations and chunk text accordingly. **Limitation:** `trace --run` rebuilds a `QueryAnswer` with `synthesis` fixed to **`heuristic`** in code; it does not restore whether the original run used **`ask --llm`** (`openai-chat`). Use `last-answer.json` after an `ask` for accurate `synthesis` metadata.
 
 ---
 
@@ -192,7 +192,7 @@ No inbound network surface is required for core operation; network use is opt-in
 
 **DS2 — Model validation.** Loading persisted artifacts SHALL use Pydantic validation; invalid on-disk state may cause commands to fail until the workspace is repaired or regenerated.
 
-**DS3 — Core schema types (non-exhaustive).** The system relies on models including: `Source`, `Document`, `Chunk`, `ChunkProvenance`, `TopicRecord`, `TopicMarkdownArtifact`, `Claim`, `Relation`, `IngestManifest`, `CompileManifest`, `EvidencePack`, `ContextPack` (including optional **`max_tokens`** / **`used_tokens`**), `ContextSnippet`, `QueryAnswer`, `AnswerCitation`, `SearchHit`, `QueryRun`, `WorkspaceInspection`, etc., defined under `src/knowledge_compiler/schemas/`.
+**DS3 — Core schema types (non-exhaustive).** The system relies on models including: `Source`, `Document` (includes **`discovered_at`** timestamp), `Chunk`, `ChunkProvenance`, `TopicRecord`, `TopicMarkdownArtifact`, `Claim`, `Relation`, `IngestManifest`, `CompileManifest` (includes per-topic **`topics`** entries and theme metadata, not only aggregate counts), `EvidencePack`, `ContextPack` (including optional **`max_tokens`** / **`used_tokens`**), `ContextSnippet`, `QueryAnswer` (the **`evidence`** field exists for forward compatibility but **`ask` does not populate it**—citations carry chunk references), `AnswerCitation`, `SearchHit`, `QueryRun`, `WorkspaceInspection`, etc., defined under `src/knowledge_compiler/schemas/`.
 
 ---
 
@@ -232,7 +232,7 @@ The installed console script is **`knowledge-compiler`**. Global option: `--proj
 
 ## 17. Risks and limitations
 
-Lexical retrieval can still miss paraphrases unless **`--embed-rerank`** is used; even then, recall is still FTS-bounded. Embedding rerank adds **latency and API cost** and sends chunk text to the configured provider. URL ingest fetches **untrusted remote content** chosen by the operator (appropriate for a local CLI, but not a safe primitive for unsupervised server-side crawling). Compile-time themes and cross-links are **explainable but coarse**; token caps depend on **tiktoken** when available. `ask --llm` can still hallucinate if the model disobeys instructions — operators should rely on citations and `trace` for verification. X API availability and policy are external dependencies.
+Lexical retrieval can still miss paraphrases unless **`--embed-rerank`** is used; even then, recall is still FTS-bounded. Embedding rerank adds **latency and API cost** and sends chunk text to the configured provider. URL ingest fetches **untrusted remote content** chosen by the operator (appropriate for a local CLI, but not a safe primitive for unsupervised server-side crawling). Compile-time themes and cross-links are **explainable but coarse**; token caps depend on **tiktoken** when the encoder loads (otherwise a character fallback). `ask --llm` can still hallucinate if the model disobeys instructions — operators should rely on citations and `trace` for verification. Historical **`trace --run`** does not preserve LLM-vs-heuristic synthesis (see **ASK5**). X API availability and policy are external dependencies.
 
 ---
 
