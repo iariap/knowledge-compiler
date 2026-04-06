@@ -1,0 +1,25 @@
+---
+description: Always-applied engineering principles for generated code
+alwaysApply: true
+---
+
+# Pragmatic And SOLID Principles
+
+- Treat these rules as mandatory defaults for generated code, not as suggestions.
+- Implement work in small, working slices. Do not introduce broad architecture or generalized frameworks before the current slice needs them.
+- Keep code deterministic, inspectable, and easy to debug. Prefer stable IDs, ordered outputs, explicit serialization, and reproducible writes.
+- Apply Single Responsibility strictly: each module, class, and function must have one clear reason to change.
+- Keep orchestration layers thin. CLI commands, routes, and handlers must delegate to domain code and must not contain business logic.
+- Depend on small abstractions, protocols, or interfaces rather than concrete implementations when a boundary is required.
+- Apply Open/Closed pragmatically: extend behavior by adding focused implementations, not by rewriting working core logic.
+- Preserve substitutability: implementations behind the same contract must expose compatible behavior, return shapes, and error semantics.
+- Apply Interface Segregation: prefer narrow interfaces over broad service objects; do not create god classes or catch-all managers.
+- Apply Dependency Inversion at system boundaries: workflows depend on contracts for storage, connectors, and model access, not on concrete backends.
+- Use dependency injection for collaborators at system boundaries so implementations can be swapped in tests and future production variants.
+- Prefer constructor injection or explicit function parameters over hidden globals, implicit singletons, or service locators.
+- Prefer composition over inheritance. Use inheritance only when it clearly simplifies the model and preserves substitutability.
+- Make source traceability a hard requirement. Derived artifacts must link back to source evidence and remain inspectable.
+- Prefer explicit domain models and clear names over cleverness, hidden state, or magic behavior.
+- Duplicate small amounts of code rather than introducing premature abstractions. Extract shared code only after repetition proves a stable pattern.
+- Add tests only when they validate important behavior or materially reduce regression risk. Do not add tests for symmetry, coverage vanity, or implementation trivia.
+- Improve the surrounding code when touching it, but do not rewrite unrelated areas while delivering a focused slice.

@@ -1,0 +1,13 @@
+---
+description: Always-applied test generation rules
+alwaysApply: true
+---
+
+# Testing LLM Standards
+
+- Add tests only when they validate meaningful application behavior or materially reduce regression risk.
+- Prefer tests that cover user-visible or workflow-critical functionality over tests that restate implementation details.
+- Avoid tests written only for coverage, symmetry, or habit.
+- Favor a small number of high-value tests over many brittle micro-tests.
+- Test deterministic behavior, provenance, manifests, retrieval quality, and core CLI or API flows when those behaviors matter to trust.
+- Do not lock tests to incidental implementation details such as private helper structure, temporary formatting, or internal call order unless that detail is part of the contract.

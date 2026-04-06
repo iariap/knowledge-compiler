@@ -1,0 +1,3 @@
+Knowledge systems should preserve provenance.
+
+Retrieval should prefer chunks before summaries.

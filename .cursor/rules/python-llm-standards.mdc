@@ -1,0 +1,18 @@
+---
+description: Always-applied Python code generation rules
+alwaysApply: true
+---
+
+# Python LLM Standards
+
+- Target modern `Python 3.14` syntax and standard library features.
+- Prefer explicit `Pydantic` models over untyped `dict` payloads for domain data, persisted artifacts, inputs, outputs, and internal contracts.
+- Use `dict` only when interfacing with APIs or libraries that explicitly require a mapping shape; inmediately convert back to typed models quickly.
+- Keep functions and classes narrowly scoped; split discovery, normalization, storage, retrieval, and workflow logic into separate modules.
+- Keep orchestration layers thin: CLI, routes, and handlers should delegate to domain services instead of holding business logic.
+- Inject collaborators such as connectors, repositories, storage adapters, and model clients instead of instantiating them deep inside business logic.
+- Prefer constructor injection or explicit parameters for dependencies so tests can replace collaborators without patch-heavy setups.
+- Prefer immutable or frozen models for stable domain contracts unless mutation is clearly required.
+- Make behavior deterministic where possible: stable IDs, ordered outputs, explicit serialization, and reproducible file writes.
+- Favor composition and small protocols over inheritance hierarchies.
+- Avoid speculative abstractions such as plugin systems, service locators, or generic base classes unless a real second implementation requires them.

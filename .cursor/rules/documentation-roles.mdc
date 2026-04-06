@@ -1,0 +1,10 @@
+---
+description: Always-applied documentation role split for README and practical-guide
+alwaysApply: true
+---
+
+# Documentation Roles
+
+- `README.md` is for general information about the project. It should explain what the project is, why it exists, how it is designed, and what state it is currently in.
+- `practical-guide.md` is a booklet for learning how to use the tool. It should contain usage examples, definitions, explanations, and practical guidance for day-to-day operation.
+- Do not let the two files drift into the same role. `README.md` is the broad project guide; `practical-guide.md` is the practical user guide.

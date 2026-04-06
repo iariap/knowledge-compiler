@@ -1,0 +1,18 @@
+# Secrets and local env (keep .env.example in git as template)
+.env
+
+# Local workspace output (ingest, compile, index, query state)
+/workspace/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+*.swp

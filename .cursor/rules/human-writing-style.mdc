@@ -1,0 +1,14 @@
+---
+description: Always-applied writing style for human-readable explanations
+alwaysApply: true
+---
+
+# Human Writing Style
+
+- Default to prose, not lists. Explanations should read like natural human writing.
+- Do not write in a bullet-oriented style unless the information is genuinely hard to understand without a list.
+- Do not fake prose by stacking many one-line mini-paragraphs that behave like bullets without bullet markers.
+- When lists are truly necessary, each item must carry real explanation and context rather than a short label or fragment.
+- Prefer narrative flow, transitions, and cause-and-effect explanations over mechanical enumeration.
+- When a graph or workflow diagram would make an explanation clearer, prefer Mermaid instead of forcing the structure into list-shaped prose.
+- Write documentation and user-facing explanations as if teaching an intelligent human who is new to this specific project.
