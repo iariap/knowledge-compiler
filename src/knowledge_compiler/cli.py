@@ -128,6 +128,10 @@ def compile_command(ctx: typer.Context) -> None:
             f"Lexical themes: {len(manifest.themes)} groups ({manifest.theme_clustering}). "
             f"See compile-manifest.json and topic pages."
         )
+    if manifest.lexical_cross_topic_links:
+        typer.echo(
+            f"Cross-topic links: {manifest.lexical_cross_topic_links} ({manifest.cross_topic_mode})."
+        )
 
 
 @app.command("index")

@@ -413,6 +413,12 @@ topic gets `theme_id` / `theme_label` in `topics.json`, topic Markdown includes 
 **Theme** section when present, and `compile-manifest.json` lists `themes` with
 member topic ids. Themes are coarse and explainable, not semantic clusters.
 
+It also adds **cross-topic relations** when two different topics’ titles and
+summaries overlap lexically (another Jaccard pass, capped per topic). Those
+edges use the predicate `lexically_related_to` and appear in `relations.jsonl`
+with ids like `xref-<topic-a>-to-<topic-b>`. Counts are summarized in
+`compile-manifest.json` as `lexical_cross_topic_links`.
+
 ### Index
 
 Use `index` whenever the chunk state changes and you want grounded retrieval to

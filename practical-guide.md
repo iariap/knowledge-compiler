@@ -197,6 +197,10 @@ with labels derived from frequent terms (no vectors). Check `compile-manifest.js
 (`themes`) and each topic’s **Theme** section in Markdown; `topics.json` includes
 `theme_id` and `theme_label`.
 
+**Cross-topic links:** when two different topics overlap enough in title+summary
+vocabulary, compile emits `lexically_related_to` rows in `relations.jsonl`
+(`xref-…` ids). The manifest field `lexical_cross_topic_links` counts them.
+
 Right now the compile step is intentionally conservative beyond that: it does not
 build a hand-curated ontology.
 

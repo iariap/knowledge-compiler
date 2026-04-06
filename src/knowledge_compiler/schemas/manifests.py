@@ -60,6 +60,8 @@ class CompileManifest(BaseModel):
     source_ids: tuple[str, ...] = ()
     themes: tuple[TopicThemeEntry, ...] = ()
     theme_clustering: str = "lexical-jaccard-v1"
+    lexical_cross_topic_links: int = 0
+    cross_topic_mode: str = ""
 
     @model_validator(mode="before")
     @classmethod

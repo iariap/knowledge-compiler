@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from itertools import batched
 from re import sub
 
+from knowledge_compiler.compile.cross_links import lexical_cross_topic_relations
 from knowledge_compiler.compile.themes import cluster_topics_lexical
 from knowledge_compiler.schemas import (
     Chunk,
@@ -83,6 +84,9 @@ def compile_knowledge(
         )
         for s in staged
     ]
+    cross_topic_relations = lexical_cross_topic_relations(pre_records)
+    relations.extend(cross_topic_relations)
+
     themes, theme_map = cluster_topics_lexical(pre_records)
 
     topic_records: list[TopicRecord] = []
@@ -137,6 +141,8 @@ def compile_knowledge(
         source_id=source_ids[0] if len(source_ids) == 1 else "multi-source",
         themes=themes,
         theme_clustering="lexical-jaccard-v1",
+        lexical_cross_topic_links=len(cross_topic_relations),
+        cross_topic_mode="lexical-jaccard-v1" if cross_topic_relations else "",
     )
     return topic_records, markdown_artifacts, claims, relations, manifest
 
