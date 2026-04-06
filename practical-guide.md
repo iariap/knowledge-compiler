@@ -136,9 +136,13 @@ Use `ingest` when the source folder is the thing that changed.
 uv run knowledge-compiler ingest /path/to/my-notes
 ```
 
-This command walks the directory, reads supported files, normalizes the text,
-builds deterministic chunks, and writes the normalized state into
-`workspace/state/`.
+This command walks the directory, reads supported files (`md`, `txt`, `html`/`htm`
+with simple tag stripping), normalizes the text, builds deterministic chunks, and
+writes the normalized state into `workspace/state/`.
+
+Add **`--merge`** when you already have another source in the workspace (for
+example after `ingest-x-bookmarks`) and you want to add or refresh this folder
+without dropping the other source’s documents.
 
 You should think of this as the moment where raw files become canonical
 evidence.
@@ -172,9 +176,10 @@ corto (~240 caracteres), no el post entero. En `context` y `ask` solo verás
 fragmentos que quepan en el presupuesto de caracteres.
 
 Use `--max-pages` if you want to cap how many paged API calls run (helpful when
-experimenting). Each ingest run still **replaces** the current `workspace/state`
-bundle, the same way a folder `ingest` does, so you cannot yet merge bookmarks
-with a local folder in one workspace state—pick one source per refresh cycle.
+experimenting). By default each run **replaces** the whole `workspace/state`
+bundle. Use **`--merge`** to refresh only the bookmark source and keep documents
+from a prior folder `ingest` (or the other way around: folder ingest with
+`--merge` after bookmarks).
 
 ### `compile`
 
@@ -304,12 +309,22 @@ the underlying artifact.”
 
 ### `trace`
 
-Use `trace` after `ask`, when you want to see which chunks supported the most
-recent answer.
+Use `trace` after `ask`, when you want to see which chunks supported an answer.
+By default it follows `workspace/state/last-answer.json` (the latest `ask`).
 
 ```bash
 uv run knowledge-compiler trace
 ```
+
+If you ran more queries afterward, list ids with `runs`, then trace the older
+`ask` by id (full id or a unique prefix):
+
+```bash
+uv run knowledge-compiler trace --run ask-1a2b3c4d5e6f
+```
+
+Older lines in `query-runs.jsonl` from before citation storage may not support
+`--run`; run a fresh `ask` if you need a traceable snapshot.
 
 This command is the easiest way to keep the system honest. If the answer feels
 surprising, vague, or too confident, `trace` lets you inspect the cited chunk
@@ -324,13 +339,13 @@ looking only at the current “last” artifacts.
 uv run knowledge-compiler runs
 ```
 
-This command shows the recent local history of `retrieve`, `context`, and `ask`
-runs. It is useful when you want to compare what you queried, what the system
-retrieved, how much context it selected, and what kind of answer surface it
-produced. For `context` and `ask`, the same `context_chars` field reflects how
-many characters were included after the budget was applied. When topics or
-claims are linked to the retrieved chunks, the summary line also includes
-`topics` and `claims` counts.
+Each line begins with a **run id** (use it with `trace --run` for past `ask`
+runs), then the command, query, and counts. It is useful when you want to compare
+what you queried, what the system retrieved, how much context it selected, and
+what kind of answer surface it produced. For `context` and `ask`, the same
+`context_chars` field reflects how many characters were included after the budget
+was applied. When topics or claims are linked to the retrieved chunks, the
+summary line also includes `topics` and `claims` counts.
 
 ## What Gets Written To Disk
 

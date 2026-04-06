@@ -5,7 +5,7 @@ from knowledge_compiler.schemas import IngestManifest
 from knowledge_compiler.storage import WorkspaceStore
 
 
-def ingest_local_files(*, input_path: Path, store: WorkspaceStore) -> IngestManifest:
+def ingest_local_files(*, input_path: Path, store: WorkspaceStore, merge: bool = False) -> IngestManifest:
     connector = LocalFilesConnector(input_path)
     source = connector.describe_source()
     documents, chunks = connector.ingest()
@@ -13,4 +13,5 @@ def ingest_local_files(*, input_path: Path, store: WorkspaceStore) -> IngestMani
         source=source,
         documents=documents,
         chunks=chunks,
+        merge=merge,
     )

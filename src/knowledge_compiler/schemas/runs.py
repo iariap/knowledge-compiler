@@ -16,3 +16,5 @@ class QueryRun(BaseModel):
     claim_count: int = 0
     context_chars: int | None = None
     answer_preview: str | None = None
+    answer_text: str | None = None
+    citation_chunk_ids: tuple[str, ...] = ()

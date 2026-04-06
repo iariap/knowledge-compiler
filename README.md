@@ -62,7 +62,8 @@ reader to reconstruct the intent from fragments.
 ## What Exists Today
 
 Today the repo includes the project scaffolding, a typed domain model, local
-ingestion for `md` and `txt`, optional ingestion of posts you have **saved on X**
+ingestion for `md`, `txt`, and `html`/`htm` (body text extracted with the standard
+library), optional ingestion of posts you have **saved on X**
 (bookmarks) through the official API when you supply an OAuth 2.0 user access
 token, deterministic normalization and chunking, a basic
 compile pipeline that emits Markdown topic pages, lightweight claims and
@@ -76,8 +77,10 @@ The repo includes project skills for the workflows that already exist.
 The CLI already exposes the full local workflow. `knowledge-compiler ingest
 <input-dir>` reads and normalizes local source material.
 `knowledge-compiler ingest-x-bookmarks` pulls your X bookmarks over HTTPS and
-feeds them through the same normalization and chunking path (replacing the
-current ingest bundle, like a fresh folder ingest). `knowledge-compiler
+feeds them through the same normalization and chunking path. By default each
+ingest run **replaces** the normalized bundle; pass **`--merge`** on `ingest` or
+`ingest-x-bookmarks` to add or refresh one source while keeping others.
+`knowledge-compiler
 compile` converts that normalized state into compiled topic artifacts, and
 `knowledge-compiler index` rebuilds the local chunk search index.
 
@@ -265,8 +268,8 @@ flowchart TD
 
 When you run `ingest`, the project walks a local directory, reads the supported
 files, normalizes their text, chunks the content deterministically, and writes
-typed artifacts into `workspace/state/`. At the moment the supported inputs are
-`md` and `txt`.
+typed artifacts into `workspace/state/`. Supported file types are `md`, `txt`, and `html`/`htm` (tags and script/style
+blocks are stripped; visible text is normalized like other files).
 
 When you run `compile`, the project loads the normalized documents and chunks,
 groups chunks by document, creates one Markdown topic page per document, emits
@@ -332,6 +335,10 @@ artifacts from it.
 uv run knowledge-compiler ingest <input-dir>
 ```
 
+Use **`--merge`** to keep documents from other sources already in
+`workspace/state/` and only replace rows for this connector’s `source_id` (for
+example local notes plus bookmarks in one workspace).
+
 A concrete example looks like this:
 
 ```bash
@@ -377,15 +384,18 @@ uv run knowledge-compiler ingest-x-bookmarks
 ```
 
 Optional flags: `--max-pages` stops after N API pages (useful for tests or large
-libraries), and `--page-size` controls page size up to 100 (the API maximum).
+libraries), `--page-size` controls page size up to 100 (the API maximum), and
+**`--merge`** combines bookmark documents with an existing workspace from another
+source instead of wiping it.
 
 Access to the bookmarks endpoints also depends on your X developer project
 capabilities and current platform rules, which change independently of this
 repo.
 
-Like `ingest <dir>`, this command **replaces** the current normalized bundle in
-`workspace/state/` for that workspace. Mixing local files and X in one corpus is
-not implemented yet: run one ingest source, then `compile` and `index`.
+Without **`--merge`**, this command **replaces** the normalized bundle in
+`workspace/state/`, the same default as folder `ingest`. With **`--merge`**, only
+bookmark rows are refreshed and other sources stay in place; then run `compile`
+and `index` over the combined corpus.
 
 ### Compile
 
@@ -530,15 +540,22 @@ artifacts and source ranges.
 
 ### Trace
 
-Use `trace` when you want to see how the most recent grounded answer maps back
-to cited chunks.
+Use `trace` when you want to see how a grounded `ask` answer maps back to cited
+chunks. With no options it uses `workspace/state/last-answer.json` (the most
+recent `ask`).
 
 ```bash
 uv run knowledge-compiler trace
 ```
 
-This command reads the last stored query answer and shows the supporting chunk
-content that was cited by the current query flow.
+To re-open an older `ask` after further queries, copy the **run id** from
+`runs` (first column) and pass:
+
+```bash
+uv run knowledge-compiler trace --run ask-<prefix>
+```
+
+The id can be abbreviated while it stays unique among recorded `ask` runs.
 
 ### Runs
 
@@ -549,12 +566,13 @@ activity without opening `workspace/state/query-runs.jsonl` directly.
 uv run knowledge-compiler runs
 ```
 
-Each line summarizes one recorded command: the query text, how many hits or
-citations were involved, and how many distinct chunks were tied to that step.
-When the compile graph associates topics or claims with those chunks, the line
-also includes `topics` and `claims` counts. `context` runs show `context_chars`
-after the character budget was applied; `ask` runs reuse that field for the
-bounded context that fed the answer, and include a short answer preview.
+Each line starts with a **run id**, then the command, query, hit counts, and
+chunk counts. When the compile graph associates topics or claims with those
+chunks, the line also includes `topics` and `claims` counts. `context` runs show
+`context_chars` after the character budget was applied; `ask` runs reuse that
+field for the bounded context that fed the answer, and include a short answer
+preview. Newer `ask` runs also store full answer text and citation chunk ids so
+`trace --run` can replay evidence.
 
 ## Project Root
 
@@ -678,12 +696,14 @@ The current codebase is verified with `pytest` and `ty`.
 
 This is still an early vertical slice, so the boundaries are intentionally
 tight. Ingestion is either local `md`/`txt` folders or, separately, X bookmarks
-via API with a user OAuth token. `html` is planned but not implemented yet. The
+via API with a user OAuth token. `html`/`htm` ingestion strips markup to plain
+text; it is not a full readability or boilerplate-removal pipeline. The
 compile step currently produces one topic page per document. Claims and relations
 are deliberately simple. Retrieval is lexical only, with no embeddings, semantic
 reranking, or graph-aware query expansion. Inspection and trace currently work
 only against the locally persisted artifacts, and `trace` is intentionally
-focused on the last grounded answer rather than arbitrary historical query runs.
+focused on persisted artifacts; `trace --run` replays older `ask` runs recorded
+after citation storage was added.
 Retrieval adds **lexical** diversification and per-document caps on top of BM25,
 but there are still **no embeddings** or learned rerankers. Compile-time
 **themes** are keyword overlap clusters, not semantic topics. The `ContextPack`

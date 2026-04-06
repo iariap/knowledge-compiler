@@ -8,6 +8,7 @@ from knowledge_compiler.services.inspect import inspect_chunk, inspect_topic, in
 from knowledge_compiler.services.retrieve import retrieve_evidence
 from knowledge_compiler.services.runs import list_query_runs
 from knowledge_compiler.services.trace import trace_last_answer
+from knowledge_compiler.services.trace_runs import trace_ask_run
 
 __all__ = [
     "ask_workspace",
@@ -21,5 +22,6 @@ __all__ = [
     "inspect_workspace",
     "retrieve_evidence",
     "list_query_runs",
+    "trace_ask_run",
     "trace_last_answer",
 ]

@@ -8,7 +8,7 @@ from knowledge_compiler.schemas import Chunk, Document, Source
 
 
 class LocalFilesConnector(Connector):
-    def __init__(self, root: Path, include_extensions: tuple[str, ...] = ("md", "txt")) -> None:
+    def __init__(self, root: Path, include_extensions: tuple[str, ...] = ("md", "txt", "html", "htm")) -> None:
         self._root = root.resolve()
         self._include_extensions = include_extensions
 

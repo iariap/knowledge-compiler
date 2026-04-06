@@ -1,4 +1,4 @@
-from hashlib import sha256
+from uuid import uuid4
 
 from knowledge_compiler.schemas import ContextPack, EvidencePack, QueryAnswer, QueryRun
 from knowledge_compiler.storage import WorkspaceStore
@@ -50,6 +50,8 @@ def record_ask_run(
         claim_count=len(context_pack.claim_ids) if context_pack is not None else 0,
         context_chars=context_pack.used_chars if context_pack is not None else None,
         answer_preview=answer.answer_text[:160],
+        answer_text=answer.answer_text,
+        citation_chunk_ids=tuple(citation.chunk_id for citation in answer.citations),
     )
     store.append_query_run(run)
     return run
@@ -60,5 +62,5 @@ def list_query_runs(*, store: WorkspaceStore, limit: int = 10) -> list[QueryRun]
 
 
 def _run_id(command: str, query: str) -> str:
-    digest = sha256(f"{command}:{query}".encode("utf-8")).hexdigest()
-    return f"{command}-{digest[:12]}"
+    _ = query  # retained for call-site compatibility; ids must be unique per invocation
+    return f"{command}-{uuid4().hex[:12]}"

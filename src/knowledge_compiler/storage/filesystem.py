@@ -44,8 +44,9 @@ def persist_ingest_artifacts(
     write_json(
         settings.state_dir / "ingest-manifest.json",
         {
-            "source_id": source.source_id,
-            "document_count": len(documents),
             "chunk_count": len(chunks),
+            "document_count": len(documents),
+            "source_id": source.source_id,
+            "source_ids": [source.source_id],
         },
     )

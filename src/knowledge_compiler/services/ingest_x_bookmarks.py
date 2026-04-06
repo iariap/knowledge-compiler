@@ -9,6 +9,7 @@ def ingest_x_bookmarks(
     client: XApiClient | None = None,
     max_pages: int | None = None,
     page_size: int = 100,
+    merge: bool = False,
 ) -> IngestManifest:
     resolved = client if client is not None else XApiClient.from_environment()
     connector = XBookmarksConnector(resolved, max_pages=max_pages, page_size=page_size)
@@ -18,4 +19,5 @@ def ingest_x_bookmarks(
         source=source,
         documents=documents,
         chunks=chunks,
+        merge=merge,
     )

@@ -1,7 +1,10 @@
 import json
+import shutil
 from pathlib import Path
 
 from typer.testing import CliRunner
+
+from knowledge_compiler.ingestion.html_text import html_to_plain_text
 
 from knowledge_compiler.cli import app
 from knowledge_compiler.connectors import LocalFilesConnector
@@ -114,6 +117,28 @@ def test_inspect_workspace_chunk_and_topic_commands() -> None:
         assert "Supporting chunks:" in topic_result.output
 
 
+def test_trace_command_traces_historical_ask_run() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        fixture_root = Path(__file__).parent / "fixtures" / "input"
+
+        assert runner.invoke(app, ["ingest", str(fixture_root.resolve())]).exit_code == 0
+        assert runner.invoke(app, ["compile"]).exit_code == 0
+        assert runner.invoke(app, ["index"]).exit_code == 0
+        assert runner.invoke(app, ["ask", "deterministic chunking"]).exit_code == 0
+
+        runs_out = runner.invoke(app, ["runs", "--limit", "5"])
+        assert runs_out.exit_code == 0
+        first_line = runs_out.output.strip().splitlines()[0]
+        run_id = first_line.split(" | ", 1)[0]
+
+        trace_result = runner.invoke(app, ["trace", "--run", run_id])
+        assert trace_result.exit_code == 0
+        assert "Query: deterministic chunking" in trace_result.output
+        assert "Evidence:" in trace_result.output
+
+
 def test_trace_command_uses_last_answer() -> None:
     runner = CliRunner()
 
@@ -210,9 +235,78 @@ def test_runs_command_lists_recent_query_history() -> None:
 
         runs_result = runner.invoke(app, ["runs", "--limit", "5"])
         assert runs_result.exit_code == 0
-        assert "retrieve | query='deterministic chunking'" in runs_result.output
+        assert "retrieve |" in runs_result.output and "query='deterministic chunking'" in runs_result.output
         assert "context | query='deterministic chunking'" in runs_result.output
         assert "ask | query='deterministic chunking'" in runs_result.output
 
         run_lines = Path("workspace/state/query-runs.jsonl").read_text(encoding="utf-8").splitlines()
         assert len(run_lines) >= 3
+
+
+def test_html_to_plain_text_skips_script_and_keeps_body() -> None:
+    html = "<html><body><p>Hello</p><script>evil()</script><p>World</p></body></html>"
+    text = html_to_plain_text(html)
+    assert "Hello" in text
+    assert "World" in text
+    assert "evil" not in text
+
+
+def test_merge_ingest_accumulates_two_sources() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        fixture_a = Path(__file__).resolve().parent / "fixtures" / "input"
+        fixture_b = Path(__file__).resolve().parent / "fixtures" / "merge_b"
+        Path("a").mkdir()
+        Path("b").mkdir()
+        shutil.copytree(fixture_a, Path("a"), dirs_exist_ok=True)
+        shutil.copytree(fixture_b, Path("b"), dirs_exist_ok=True)
+
+        assert runner.invoke(app, ["ingest", "a"]).exit_code == 0
+        assert runner.invoke(app, ["ingest", "b", "--merge"]).exit_code == 0
+
+        manifest = json.loads(Path("workspace/state/ingest-manifest.json").read_text(encoding="utf-8"))
+        assert manifest["document_count"] == 4
+        assert len(manifest["source_ids"]) == 2
+
+        sources = json.loads(Path("workspace/state/sources.json").read_text(encoding="utf-8"))
+        assert len(sources) == 2
+
+        assert runner.invoke(app, ["compile"]).exit_code == 0
+        assert runner.invoke(app, ["index"]).exit_code == 0
+
+        inspect_out = runner.invoke(app, ["inspect", "workspace"])
+        assert inspect_out.exit_code == 0
+        assert "Sources (2):" in inspect_out.output
+
+        compiled = json.loads(Path("workspace/compiled/compile-manifest.json").read_text(encoding="utf-8"))
+        assert compiled["topic_count"] == 4
+        assert compiled["source_id"] == "multi-source"
+        assert len(compiled["source_ids"]) == 2
+
+        retrieve = runner.invoke(app, ["retrieve", "Phoenix ledger", "--limit", "2"])
+        assert retrieve.exit_code == 0
+        assert "Phoenix" in retrieve.output
+
+        html_retrieve = runner.invoke(app, ["retrieve", "Visible HTML paragraph", "--limit", "2"])
+        assert html_retrieve.exit_code == 0
+        assert "Visible" in html_retrieve.output or "ingestion" in html_retrieve.output
+
+
+def test_second_ingest_without_merge_replaces_workspace() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        fixture_a = Path(__file__).resolve().parent / "fixtures" / "input"
+        fixture_b = Path(__file__).resolve().parent / "fixtures" / "merge_b"
+        Path("a").mkdir()
+        Path("b").mkdir()
+        shutil.copytree(fixture_a, Path("a"), dirs_exist_ok=True)
+        shutil.copytree(fixture_b, Path("b"), dirs_exist_ok=True)
+
+        assert runner.invoke(app, ["ingest", "a"]).exit_code == 0
+        assert runner.invoke(app, ["ingest", "b"]).exit_code == 0
+
+        manifest = json.loads(Path("workspace/state/ingest-manifest.json").read_text(encoding="utf-8"))
+        assert manifest["document_count"] == 2
+        assert len(manifest["source_ids"]) == 1

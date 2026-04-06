@@ -10,7 +10,6 @@ from knowledge_compiler.schemas import (
     CompileManifest,
     Document,
     Relation,
-    Source,
     TopicMarkdownArtifact,
     TopicManifestEntry,
     TopicPage,
@@ -28,7 +27,6 @@ class _StagedTopic:
 
 def compile_knowledge(
     *,
-    source: Source,
     documents: list[Document],
     chunks: list[Chunk],
 ) -> tuple[list[TopicRecord], list[TopicMarkdownArtifact], list[Claim], list[Relation], CompileManifest]:
@@ -129,12 +127,14 @@ def compile_knowledge(
             )
         )
 
+    source_ids = tuple(sorted({document.source_id for document in documents}))
     manifest = CompileManifest(
-        source_id=source.source_id,
         topic_count=len(topic_records),
         claim_count=len(claims),
         relation_count=len(relations),
         topics=tuple(manifest_topics),
+        source_ids=source_ids,
+        source_id=source_ids[0] if len(source_ids) == 1 else "multi-source",
         themes=themes,
         theme_clustering="lexical-jaccard-v1",
     )

@@ -11,6 +11,7 @@ class WorkspaceInspection(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source_id: str
+    source_ids: tuple[str, ...] = ()
     document_count: int
     chunk_count: int
     topic_count: int

@@ -18,6 +18,7 @@ from knowledge_compiler.services import (
     inspect_workspace,
     list_query_runs,
     retrieve_evidence,
+    trace_ask_run,
     trace_last_answer,
 )
 from knowledge_compiler.storage import WorkspaceStore
@@ -57,9 +58,14 @@ app.add_typer(inspect_app, name="inspect")
 def ingest(
     ctx: typer.Context,
     input_path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    merge: bool = typer.Option(
+        False,
+        "--merge",
+        help="Add or replace this source's documents without dropping other sources.",
+    ),
 ) -> None:
     store = _store(ctx)
-    manifest = ingest_local_files(input_path=input_path, store=store)
+    manifest = ingest_local_files(input_path=input_path, store=store, merge=merge)
 
     typer.echo(
         f"Ingested {manifest.document_count} documents and {manifest.chunk_count} chunks into "
@@ -83,6 +89,11 @@ def ingest_x_bookmarks_command(
         max=100,
         help="Bookmarks per request (X API allows at most 100).",
     ),
+    merge: bool = typer.Option(
+        False,
+        "--merge",
+        help="Add or replace bookmark documents without dropping other ingested sources.",
+    ),
 ) -> None:
     """Ingest posts you saved on X via API v2 bookmarks (OAuth 2.0 user token required)."""
     store = _store(ctx)
@@ -91,6 +102,7 @@ def ingest_x_bookmarks_command(
             store=store,
             max_pages=max_pages,
             page_size=page_size,
+            merge=merge,
         )
     except (OSError, ValueError) as error:
         typer.echo(str(error))
@@ -302,7 +314,12 @@ def inspect_workspace_command(ctx: typer.Context) -> None:
     store = _store(ctx)
     inspection = inspect_workspace(store=store)
 
-    typer.echo(f"Source: {inspection.source_id}")
+    if len(inspection.source_ids) > 1:
+        typer.echo(f"Sources ({len(inspection.source_ids)}): {', '.join(inspection.source_ids)}")
+    elif inspection.source_ids:
+        typer.echo(f"Source: {inspection.source_ids[0]}")
+    else:
+        typer.echo(f"Source: {inspection.source_id}")
     typer.echo(
         f"Documents: {inspection.document_count}, chunks: {inspection.chunk_count}, "
         f"topics: {inspection.topic_count}"
@@ -378,11 +395,21 @@ def inspect_topic_command(ctx: typer.Context, topic_id: str = typer.Argument(...
 
 
 @app.command("trace")
-def trace_command(ctx: typer.Context) -> None:
+def trace_command(
+    ctx: typer.Context,
+    run: str | None = typer.Option(
+        None,
+        "--run",
+        help="Trace a past `ask` run by id (from `runs`); default: last-answer.json.",
+    ),
+) -> None:
     store = _store(ctx)
     try:
-        trace = trace_last_answer(store=store)
+        trace = trace_ask_run(store=store, run_id=run) if run else trace_last_answer(store=store)
     except FileNotFoundError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    except (KeyError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
 
@@ -408,7 +435,7 @@ def runs_command(ctx: typer.Context, limit: int = typer.Option(10, min=1, max=10
 
     for run in runs:
         line = (
-            f"{run.command} | query={run.query!r} | hits={run.hit_count} | chunks={run.chunk_count}"
+            f"{run.run_id} | {run.command} | query={run.query!r} | hits={run.hit_count} | chunks={run.chunk_count}"
         )
         if run.topic_count or run.claim_count:
             line += f" | topics={run.topic_count} | claims={run.claim_count}"

@@ -4,12 +4,10 @@ from knowledge_compiler.storage import WorkspaceStore
 
 
 def compile_workspace(*, store: WorkspaceStore) -> CompileManifest:
-    source = store.load_source()
     documents = store.load_documents()
     chunks = store.load_chunks()
 
     topic_records, markdown_artifacts, claims, relations, manifest = compile_knowledge(
-        source=source,
         documents=documents,
         chunks=chunks,
     )
