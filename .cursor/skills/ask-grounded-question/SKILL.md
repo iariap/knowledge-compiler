@@ -30,6 +30,11 @@ With an alternate project root:
 uv run knowledge-compiler -p /path/to/project-root ask "<question>"
 ```
 
+Optional: same retrieval flags as **`retrieve`** (`--match`, `--candidate-pool`,
+`--max-per-document`). Optional **LLM wording**: **`ask --llm`** when
+`KNOWLEDGE_COMPILER_OPENAI_API_KEY` is set (OpenAI-compatible chat); citations stay
+tied to retrieved chunks.
+
 ## If The Index Is Missing
 
 Rebuild the index for the same project root:

@@ -33,20 +33,21 @@ uv run knowledge-compiler -p /path/to/project-root inspect chunk <chunk-id>
 `inspect workspace` reports a **themes** count when the compile manifest lists
 lexical theme groups.
 
-## Trace the last answer
+## Trace grounded answers
 
-If the user wants to see the evidence behind the most recent grounded query,
-run:
+Most recent **`ask`** (reads `last-answer.json`):
 
 ```bash
 uv run knowledge-compiler trace
 ```
 
-With an alternate project root:
+A specific past **`ask`** (id from **`runs`**, full id or unique prefix):
 
 ```bash
-uv run knowledge-compiler -p /path/to/project-root trace
+uv run knowledge-compiler trace --run ask-abc123deadbeef
 ```
+
+With an alternate project root, prefix **`-p`** on the same line as **`trace`**.
 
 ## Notes
 

@@ -10,7 +10,8 @@ questions with citations.
 This file is the general guide to the project. It is meant to explain what the
 project is, why it exists, how it is structured, and what it currently does. If
 you want the practical user booklet, examples, and day-to-day command guidance,
-use `practical-guide.md`.
+use **`practical-guide.md`** as the day-to-day booklet (commands, workspace layout,
+multi-source ingest, querying, LLM option, troubleshooting).
 
 The codebase targets modern `Python 3.14`.
 

@@ -1,87 +1,52 @@
-# Practical Guide
+# Practical Guide: Using the Knowledge Compiler
 
-This file is the practical guide to using `knowledge-compiler`.
+This booklet is the **hands-on manual** for `knowledge-compiler`: how to run it,
+what each command does, how artifacts fit together as a small **local knowledge
+graph** (topics, claims, relations), and how to stay grounded when you query.
 
-`README.md` explains the project itself: why it exists, how it is structured,
-and what design principles shape it. This file is narrower and more practical.
-It is meant to help you operate the tool, understand what each command is for,
-and build good habits when working with a local knowledge corpus.
+`README.md` stays the project essay—motivation, architecture, principles. **This
+file is for day-to-day use.**
 
-If you remember only one thing, remember this: the tool is not trying to hide
-its workflow. It wants you to see the path from source files to evidence, from
-evidence to selected context, and from selected context to answer.
+---
 
-## What The Tool Does In Practice
+## Contents
 
-You point the tool at a folder that contains notes or documents. The tool reads
-those files, turns them into deterministic chunks, compiles a first layer of
-knowledge artifacts, builds a local search index, and then lets you query the
-corpus in grounded ways.
+1. [What you are building](#1-what-you-are-building)
+2. [Install and first run](#2-install-and-first-run)
+3. [Project root and `workspace/`](#3-project-root-and-workspace)
+4. [End-to-end pipeline](#4-end-to-end-pipeline)
+5. [Ingest: files, HTML, merge, X bookmarks](#5-ingest-files-html-merge-x-bookmarks)
+6. [Compile and index](#6-compile-and-index)
+7. [The compiled graph](#7-the-compiled-graph)
+8. [Querying: retrieve and context](#8-querying-retrieve-and-context)
+9. [Ask: heuristic vs LLM](#9-ask-heuristic-vs-llm)
+10. [Inspect, trace, and runs](#10-inspect-trace-and-runs)
+11. [Good habits and debugging order](#11-good-habits-and-debugging-order)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Limitations](#13-limitations)
+14. [X bookmarks: auth notes (ES)](#14-x-bookmarks-auth-notes-es)
 
-The important difference from a normal “chat with files” workflow is that the
-system keeps the intermediate steps visible. You can inspect what was ingested,
-what was compiled, what was retrieved, what was selected into the answer
-context, and what evidence was ultimately cited.
+---
 
-That makes it a much better fit for work where trust matters. If something
-looks wrong, you can inspect the pipeline instead of guessing.
+## 1. What you are building
 
-## What It Supports Right Now
+The tool turns sources into **stable chunks** with provenance, compiles a first
+layer of **topics and claims**, links **relations** (within topics and across
+topics when vocabulary overlaps), indexes text with **SQLite FTS**, and answers
+questions with **citations** to real chunks—not vibes.
 
-At the moment the tool is intentionally narrow. It works with local `md` and
-`txt` files, and it can optionally pull posts you have **saved on X** (API
-bookmarks) if you configure an OAuth 2.0 user access token. It can ingest those
-sources, compile them into a first layer of topic artifacts, index the chunks
-with local SQLite full-text search, retrieve evidence, build a bounded context
-selection, answer questions with citations, inspect stored artifacts, and trace
-the most recent answer back to its chunks.
+Think of it as a **local, inspectable knowledge graph** backed by files: every
+interesting step writes JSON/JSONL/Markdown/SQLite you can open and diff.
 
-This means the workflow is already real, but still small. Aside from the
-optional X bookmarks API path, there is no wider connector catalog yet, no web
-UI, and no model-powered synthesis layer beyond the current grounded answer
-path.
+---
 
-## The Mental Model
-
-The easiest way to understand the tool is to think in stages, because each
-stage answers a different practical question.
-
-`ingest` answers: “How do my raw files become stable internal evidence?”
-
-`ingest-x-bookmarks` answers: “How do the posts I saved on X become the same kind
-of evidence, without exporting my whole account archive?”
-
-`compile` answers: “What derived knowledge artifacts can the system make from
-that evidence?”
-
-`index` answers: “How does the system make canonical chunks searchable?”
-
-`retrieve` answers: “What evidence seems relevant to this query?”
-
-`context` answers: “Which part of that evidence actually fits into the current
-working context?”
-
-`ask` answers: “Given that selected context, what grounded answer can I return?”
-
-`inspect` and `trace` are the trust-preserving commands. They help you move from
-“the system said something” to “show me what it used and why.”
-
-There is now also a `runs` command. It is simpler than a full run-management
-system, but it gives you a local history of recent query-time steps so you are
-not limited to whatever the tool happened to do last.
-
-## Your First Run
-
-If you want to understand the tool before using your own notes, start with the
-fixture corpus already present in the repository.
-
-Begin by syncing dependencies:
+## 2. Install and first run
 
 ```bash
 uv sync
 ```
 
-Then run the full flow:
+Run the fixture corpus through the full chain:
 
 ```bash
 uv run knowledge-compiler ingest tests/fixtures/input
@@ -94,331 +59,255 @@ uv run knowledge-compiler trace
 uv run knowledge-compiler runs
 ```
 
-That sequence is the best way to learn the tool because each command exposes a
-different layer of the pipeline.
+That sequence teaches the pipeline: **evidence → context → answer → proof**.
 
-## Using It With Your Own Notes
+---
 
-Once the sample flow makes sense, using your own corpus is straightforward.
-Replace the fixture folder with your own directory:
+## 3. Project root and `workspace/`
+
+Commands run against a **project root**: the directory that contains
+`workspace/`. Resolution order:
+
+1. **`knowledge-compiler -p /path/to/root …`**
+2. **`KNOWLEDGE_COMPILER_ROOT`**
+3. **Current working directory**
+
+All paths below are relative to that root.
+
+| Location | Role |
+| -------- | ---- |
+| `workspace/state/` | Ingest output, query caches, run history |
+| `workspace/compiled/` | Topics, claims, relations, manifests |
+| `workspace/indexes/` | `retrieval.db` (FTS) |
+
+Optional: copy `.env.example` to `.env` in the project root for API keys (X,
+OpenAI-compatible LLM). The CLI loads dotenv early.
+
+---
+
+## 4. End-to-end pipeline
+
+**Offline (batch):** `ingest` → `compile` → `index` whenever sources or policy
+change.
+
+**Online (query):** `retrieve` (optional debug) → `context` (optional debug) →
+`ask` → `trace` / `runs` when you need accountability.
+
+Re-run **`index`** after any ingest or compile that changes chunks. Stale indexes
+produce empty or wrong answers.
+
+---
+
+## 5. Ingest: files, HTML, merge, X bookmarks
+
+### Local folders
 
 ```bash
 uv run knowledge-compiler ingest /path/to/my-notes
-uv run knowledge-compiler compile
-uv run knowledge-compiler index
 ```
 
-If your shell is not in the directory that should hold `workspace/`, either pass
-`-p` / `--project-root` before the subcommand (for example
-`knowledge-compiler -p ~/notes-repo ingest ~/notes-repo/inbox`) or export
-`KNOWLEDGE_COMPILER_ROOT` to that project directory. The flag overrides the
-environment variable for a single run; both override the current working
-directory.
+Recursively ingests **`md`**, **`txt`**, **`html`**, **`htm`**. HTML is reduced to
+visible text (script/style stripped); it is not a full “reader mode” cleaner.
 
-From that point on, you can query the corpus:
+### Merge (multi-source workspace)
+
+Default ingest **replaces** the whole `workspace/state/` bundle. To **add** or
+refresh one connector without deleting others:
 
 ```bash
-uv run knowledge-compiler retrieve "What did I write about API design?"
-uv run knowledge-compiler context "What did I write about API design?"
-uv run knowledge-compiler ask "What did I write about API design?"
+uv run knowledge-compiler ingest /path/to/more-notes --merge
 ```
 
-For now, if your notes change, the normal refresh flow is simply to re-run
-`ingest`, `compile`, and `index`.
+The same **`--merge`** flag exists on **`ingest-x-bookmarks`**. Each source has a
+stable `source_id`; merge drops prior rows for *that* id, keeps other sources,
+and skips new documents whose `document_id` already exists (avoids duplicate
+chunk ids).
 
-## What Each Command Means
+After merging sources, run **`compile`** and **`index`** on the **combined**
+corpus.
 
-### `ingest`
-
-Use `ingest` when the source folder is the thing that changed.
-
-```bash
-uv run knowledge-compiler ingest /path/to/my-notes
-```
-
-This command walks the directory, reads supported files (`md`, `txt`, `html`/`htm`
-with simple tag stripping), normalizes the text, builds deterministic chunks, and
-writes the normalized state into `workspace/state/`.
-
-Add **`--merge`** when you already have another source in the workspace (for
-example after `ingest-x-bookmarks`) and you want to add or refresh this folder
-without dropping the other source’s documents.
-
-You should think of this as the moment where raw files become canonical
-evidence.
-
-### `ingest-x-bookmarks`
-
-Use this when your “notes” live in **X bookmarks** and you want them in the
-compiler without the zip export.
+### X bookmarks
 
 ```bash
-# Variables en .env en la raíz del proyecto (recomendado) o export en la shell
 uv run knowledge-compiler ingest-x-bookmarks
 ```
 
-Necesitas un token **OAuth 2.0 de usuario** (flujo authorization code + PKCE)
-con `tweet.read`, `users.read` y `bookmark.read`, guardado en
-`KNOWLEDGE_COMPILER_X_ACCESS_TOKEN`. La API de X **no acepta OAuth 1.0a** en el
-endpoint de bookmarks (responde 403 “Unsupported Authentication”); por eso las
-cuatro claves OAuth 1.0a del portal **no sirven** para este comando aunque estén
-bien configuradas. El Bearer “solo aplicación” tampoco vale. El tool llama a la
-API por HTTPS, arma un documento por post guardado y lo parte en chunks como el
-resto de fuentes.
+Requires **`KNOWLEDGE_COMPILER_X_ACCESS_TOKEN`** (OAuth 2.0 user token with
+`tweet.read`, `users.read`, `bookmark.read`). See [§14](#14-x-bookmarks-auth-notes-es)
+for Spanish notes on why OAuth 1.0a fails.
 
-**Texto completo vs recortes.** Si la API devuelve **`note_tweet.text`**, ese es el
-cuerpo guardado; si no, se usa el `text` normal del post. El ingest **no** recorta
-esos campos. Aun así, X puede seguir entregando texto acortado según el tipo de
-post o la cuenta. El **título** del
-tema en compile sí se acorta (~80 caracteres) para nombres de archivo; el texto
-completo sigue en los chunks. El **resumen** del topic en compile es un extracto
-corto (~240 caracteres), no el post entero. En `context` y `ask` solo verás
-fragmentos que quepan en el presupuesto de caracteres.
+The client requests **`note_tweet`** in `tweet.fields`. When present, the long
+note body is stored; otherwise the regular `text` field is used.
 
-Use `--max-pages` if you want to cap how many paged API calls run (helpful when
-experimenting). By default each run **replaces** the whole `workspace/state`
-bundle. Use **`--merge`** to refresh only the bookmark source and keep documents
-from a prior folder `ingest` (or the other way around: folder ingest with
-`--merge` after bookmarks).
+Optional: **`--max-pages`**, **`--page-size`**, **`--merge`**.
 
-### `compile`
+---
 
-Use `compile` after ingesting content and you want the first derived knowledge
-layer on top of the normalized chunks.
+## 6. Compile and index
 
 ```bash
 uv run knowledge-compiler compile
-```
-
-This command reads the normalized state and creates topic pages, claims,
-relations, and compile metadata under `workspace/compiled/`. It also assigns
-**lexical themes**: topics that share enough keywords in title+summary are grouped,
-with labels derived from frequent terms (no vectors). Check `compile-manifest.json`
-(`themes`) and each topic’s **Theme** section in Markdown; `topics.json` includes
-`theme_id` and `theme_label`.
-
-**Cross-topic links:** when two different topics overlap enough in title+summary
-vocabulary, compile emits `lexically_related_to` rows in `relations.jsonl`
-(`xref-…` ids). The manifest field `lexical_cross_topic_links` counts them.
-
-Right now the compile step is intentionally conservative beyond that: it does not
-build a hand-curated ontology.
-
-### `index`
-
-Use `index` when you want retrieval to reflect the current chunk state.
-
-```bash
 uv run knowledge-compiler index
 ```
 
-This command rebuilds the SQLite full-text index from the chunk artifacts. If
-the corpus changed, or if you re-ran ingest and compile, index again before
-querying.
+**Compile** groups chunks by document, emits one **topic** per document (Markdown
+under `workspace/compiled/topics/`), simple **claims**, **relations**
+(`contains_claim` inside each topic), **lexical themes** (keyword clusters on
+title+summary), and **cross-topic** edges (`lexically_related_to`) when two
+topics overlap enough. Counts and metadata live in **`compile-manifest.json`**.
 
-### `retrieve`
+**Index** rebuilds **`workspace/indexes/retrieval.db`** (FTS5). Treat it as
+disposable.
 
-Use `retrieve` when you want to inspect what the system found before asking it
-to form an answer.
+---
 
-```bash
-uv run knowledge-compiler retrieve "What did I write about API design?"
-```
+## 7. The compiled graph
 
-This command assembles the current `EvidencePack`. It shows the query, how many
-chunks matched, how many related topics and claims overlap with those chunks,
-and the actual retrieved hit snippets with source line ranges.
+| Artifact | Meaning |
+| -------- | ------- |
+| `topics.json` / `topics/*.md` | One topic per ingested document; summary + evidence |
+| `claims.jsonl` | Short claim strings tied to chunks |
+| `relations.jsonl` | `contains_claim` per topic; **`xref-*`** cross-topic links |
+| `compile-manifest.json` | `themes`, `lexical_cross_topic_links`, counts |
 
-Your query string is tokenized consistently for search, context selection, and
-the bundled answer heuristic: word characters (including letters outside ASCII)
-are kept, punctuation mostly acts as a separator, common English stopwords are
-dropped. By default those terms are **AND**ed in FTS; use `--match or` if any
-term should match. The CLI fetches a **candidate pool** (see `--candidate-pool`),
-then **reranks** (BM25 plus lexical overlap) and **limits chunks per document**
-(`--max-per-document`, default 2) so one source does not dominate the list.
+**Themes** and **cross-topic links** are both **lexical** (Jaccard-style overlap),
+not neural embeddings. They are explainable and cheap, not “true” semantic
+clustering.
 
-Sentence selection inside chunks uses the same token shape for overlap, so a
-query like `foo bar` still lines up with `foo-bar` in the source text.
+---
 
-This is one of the best debugging commands in the system. If retrieval is wrong,
-everything after it will also be wrong.
-
-### `context`
-
-Use `context` when you want to inspect the selected evidence that would actually
-feed answer generation.
+## 8. Querying: retrieve and context
 
 ```bash
-uv run knowledge-compiler context "What did I write about API design?"
+uv run knowledge-compiler retrieve "your query"
+uv run knowledge-compiler context "your query" --max-chars 1500
 ```
 
-You can also change the budget to see how the selection gets trimmed:
+**Retrieve** shows the **`EvidencePack`**: hits, scores, line ranges.
+
+**Context** builds the **`ContextPack`**: the snippets that fit the character
+budget (often **multiple** snippets), plus an **estimated token** hint.
+
+Shared tuning flags (also on **`ask`**):
+
+| Flag | Effect |
+| ---- | ------ |
+| `--match and` (default) | All query terms must match in FTS |
+| `--match or` | Any term may match |
+| `--candidate-pool N` | More raw hits before diversify/rerank |
+| `--max-per-document K` | Cap chunks per document in ranked list |
+
+Queries are tokenized consistently (Unicode word chars, English stopwords
+dropped). **`retrieve`** is the best debug command when answers look wrong.
+
+---
+
+## 9. Ask: heuristic vs LLM
 
 ```bash
-uv run knowledge-compiler context "What did I write about API design?" --limit 5 --max-chars 800
+uv run knowledge-compiler ask "your question"
 ```
 
-This command writes a `ContextPack`. That pack is the tool’s answer to the
-question: “Given the evidence we found, what exact evidence slice should we work
-with right now?” It may contain **multiple snippets** when the character budget
-allows; the output includes an **estimated token** count (rough heuristic) next to
-the character budget. The same `--match`, `--candidate-pool`, and
-`--max-per-document` flags as `retrieve` apply.
+Default **`ask`** stitches a short answer from the **same** context snippets
+using a **deterministic heuristic** (sentence overlap with query terms).
+**Citations** always point to retrieved chunks.
 
-### `ask`
-
-Use `ask` when you want a grounded answer with citations.
+Optional **model-assisted wording**:
 
 ```bash
-uv run knowledge-compiler ask "What did I write about API design?"
+export KNOWLEDGE_COMPILER_OPENAI_API_KEY=sk-...
+uv run knowledge-compiler ask "your question" --llm
+# optional: --llm-model … or set KNOWLEDGE_COMPILER_LLM_MODEL
 ```
 
-This command builds on the earlier steps. It retrieves evidence (with the same
-optional retrieval flags as `retrieve` / `context`), builds a bounded context
-pack, and forms an answer from the selected snippets. If the system cannot find
-supporting evidence, it should say so explicitly.
+Uses an OpenAI-compatible **`/v1/chat/completions`** endpoint (override base URL
+with **`KNOWLEDGE_COMPILER_OPENAI_BASE_URL`**). **Citations are unchanged**; only
+the prose is synthesized. `last-answer.json` records **`synthesis`**: `heuristic`,
+`openai-chat`, or `none` when no evidence.
 
-In practice, `ask` is the “normal user” query command, but the best habit early
-on is to pair it with `retrieve` and `trace` so you can understand why you got
-the answer you got.
+---
 
-### `inspect`
-
-Use `inspect` when you want to understand stored state directly instead of
-reading raw JSON files by hand.
-
-To inspect the workspace as a whole:
+## 10. Inspect, trace, and runs
 
 ```bash
 uv run knowledge-compiler inspect workspace
-```
-
-To inspect one topic:
-
-```bash
 uv run knowledge-compiler inspect topic <topic-id>
-```
-
-To inspect one chunk:
-
-```bash
 uv run knowledge-compiler inspect chunk <chunk-id>
 ```
 
-`inspect workspace` includes a **themes** count when compile has run (lexical
-theme groups from the manifest).
-
-This is useful when you want to move from “the tool said something” to “show me
-the underlying artifact.”
-
-### `trace`
-
-Use `trace` after `ask`, when you want to see which chunks supported an answer.
-By default it follows `workspace/state/last-answer.json` (the latest `ask`).
+**`inspect workspace`** shows document/chunk/topic counts and **theme** count;
+with multiple sources it lists **`Sources (N): …`**.
 
 ```bash
 uv run knowledge-compiler trace
 ```
 
-If you ran more queries afterward, list ids with `runs`, then trace the older
-`ask` by id (full id or a unique prefix):
-
-```bash
-uv run knowledge-compiler trace --run ask-1a2b3c4d5e6f
-```
-
-Older lines in `query-runs.jsonl` from before citation storage may not support
-`--run`; run a fresh `ask` if you need a traceable snapshot.
-
-This command is the easiest way to keep the system honest. If the answer feels
-surprising, vague, or too confident, `trace` lets you inspect the cited chunk
-content directly.
-
-### `runs`
-
-Use `runs` when you want to review the recent local query history instead of
-looking only at the current “last” artifacts.
+Uses **`last-answer.json`**. For an older **`ask`** after more queries:
 
 ```bash
 uv run knowledge-compiler runs
+uv run knowledge-compiler trace --run <run-id-or-prefix>
 ```
 
-Each line begins with a **run id** (use it with `trace --run` for past `ask`
-runs), then the command, query, and counts. It is useful when you want to compare
-what you queried, what the system retrieved, how much context it selected, and
-what kind of answer surface it produced. For `context` and `ask`, the same
-`context_chars` field reflects how many characters were included after the budget
-was applied. When topics or claims are linked to the retrieved chunks, the
-summary line also includes `topics` and `claims` counts.
+**`runs`** prints **`run_id` first** on each line. Only **`ask`** runs recorded
+after citation storage support **`trace --run`**; re-run **`ask`** if needed.
 
-## What Gets Written To Disk
+---
 
-The tool stores its work under `workspace/`.
+## 11. Good habits and debugging order
 
-`workspace/state/` holds normalized state and query-time artifacts. This is
-where you will find:
+When an answer is weak, work **upstream**:
 
-- `sources.json`, which records the current source configuration
-- `documents.jsonl`, which records normalized documents
-- `chunks.jsonl`, which records canonical evidence chunks
-- `ingest-manifest.json`, which summarizes ingest output
-- `last-evidence-pack.json`, which stores the most recent retrieval result
-- `last-context-pack.json`, which stores the most recent bounded context
-- `last-answer.json`, which stores the most recent answer
-- `query-runs.jsonl`, which stores recent local query-time history
+1. Did **`ingest`** see the right files?
+2. Did **`compile`** produce expected topics/claims?
+3. Does **`retrieve`** return the right chunks?
+4. Does **`context`** select the right passages?
+5. What does **`trace`** show was cited?
 
-`workspace/compiled/` holds derived knowledge artifacts. This is where you will
-find:
+Separating “what the model said” from “what evidence existed” is the point of the
+tool.
 
-- `topics/<topic>.md`, the generated Markdown topic pages
-- `topics.json`, the typed topic records
-- `claims.jsonl`, the current claim artifacts
-- `relations.jsonl`, the current relation artifacts
-- `compile-manifest.json`, the summary of compile output
+---
 
-`workspace/indexes/` holds the search index:
+## 12. Troubleshooting
 
-- `retrieval.db`, the local SQLite FTS database
+**Empty retrieval.** Run **`index`** after ingest/compile; check files under
+`workspace/state/` exist; try **`--match or`** or a shorter query.
 
-## Good Habits While Using The Tool
+**`ingest-x-bookmarks` 403.** You need OAuth **2.0 user** context, not OAuth 1.0a
+and not app-only Bearer. See §14.
 
-The most useful habit is to separate “answering” from “understanding.” If you
-get an answer that feels weak, do not immediately tweak the query and hope for a
-miracle. First run `retrieve` and `context` to see what evidence the system is
-actually working with. Then run `trace` after `ask` to see what it cited.
+**`ask --llm` errors.** Confirm **`KNOWLEDGE_COMPILER_OPENAI_API_KEY`**, network
+access, and that the base URL serves **`/v1/chat/completions`**.
 
-Another good habit is to re-run `index` after the corpus changes. Since the
-current system is local and explicit, it rewards small, disciplined refresh
-flows.
+**`trace --run` fails on old history.** Older **`query-runs.jsonl`** lines may lack
+stored citation ids; run a fresh **`ask`**.
 
-It is also worth using `inspect workspace` regularly. It gives you a quick sense
-of whether the current artifact state matches what you think the system should
-contain.
+---
 
-## Current Limitations
+## 13. Limitations
 
-The current workflow is intentionally narrow. Only local `md` and `txt` files
-are supported right now. The compile step is simple and largely document-based.
-Retrieval is lexical, not semantic. Context selection is query-aware, but still
-simple and bounded by character budget rather than real token accounting. Trace
-is focused on the most recent answer, and the query history is still a simple
-local append-only log rather than a richer run-management system.
+Retrieval is **lexical** (BM25 + diversification), not embedding search. Context
+budgeting is **character-first** with a rough token estimate, not tokenizer-perfect
+for a specific chat model. Compile is **one topic per document** with simple
+claims; themes and cross-links are **keyword overlap**, not curated ontologies.
+There is **no hosted UI** and **no connector marketplace**—only the connectors
+shipped in this repo.
 
-That means the system is already useful for local, inspectable experiments, but
-it is not yet a full production knowledge platform.
+The design favors **traceability** over pretending to be a full enterprise KG
+platform.
 
-## If Something Looks Wrong
+---
 
-If the tool gives you a weak answer, the right debugging order is usually:
+## 14. X bookmarks: auth notes (ES)
 
-First, check whether `ingest` actually saw the files you expected.
+Necesitas un token **OAuth 2.0 de usuario** (flujo authorization code + PKCE) con
+`tweet.read`, `users.read` y `bookmark.read`, guardado en
+`KNOWLEDGE_COMPILER_X_ACCESS_TOKEN`. La API de X **no acepta OAuth 1.0a** en el
+endpoint de bookmarks (403 “Unsupported Authentication”); las cuatro claves
+OAuth 1.0a del portal **no sustituyen** un user token OAuth 2. El Bearer “solo
+aplicación” tampoco sirve para `/users/me` ni bookmarks.
 
-Then check whether `compile` produced the topic and claim artifacts you expected.
-
-Then check whether `retrieve` found the evidence you expected.
-
-Then check whether `context` selected the right part of that evidence.
-
-Finally, check `trace` to see exactly what the answer cited.
-
-That order mirrors the system itself, which is why it works well.
+Variables recomendadas: copia **`.env.example`** a **`.env`** en la raíz del
+proyecto (o exporta en la shell). Usa **`knowledge-compiler -p ~/tu-repo …`** si
+el corpus no vive en el directorio actual.
