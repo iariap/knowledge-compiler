@@ -349,6 +349,19 @@ uv run knowledge-compiler ingest tests/fixtures/input
 This command recursively scans the directory, ingests supported files, and
 writes the normalized source state under `workspace/state/`.
 
+### Ingest URL
+
+Use `ingest-url` when you want to pull one or more **http(s)** pages into the same
+chunking pipeline as local HTML (response body size-capped; HTML reduced to visible
+text).
+
+```bash
+uv run knowledge-compiler ingest-url https://example.com/doc --merge
+```
+
+Documents use source id **`url-fetch`**. Combine with **`--merge`** when you already
+have folder or bookmark sources.
+
 ### Ingest X bookmarks
 
 Use `ingest-x-bookmarks` when you want your **saved posts on X** in the corpus
@@ -459,6 +472,10 @@ whether all query terms must match (default **and**) or any term may match
 before diversification (default scales with `--limit`). `--max-per-document K`
 caps how many chunks from the same source document appear in the final ranked
 list (default **2**), then the tool may backfill if the list is still short.
+`--embed-rerank` calls OpenAI-compatible **`/v1/embeddings`** to reorder the FTS
+candidate pool by cosine similarity to the query (vectors stay in memory only),
+then runs the usual lexical diversify step. **`ask`** also accepts **`--max-chars`**
+and **`--max-tokens`** so context matches your budget before answering.
 
 **Optional LLM wording.** With **`KNOWLEDGE_COMPILER_OPENAI_API_KEY`** set (and
 optional **`KNOWLEDGE_COMPILER_OPENAI_BASE_URL`** / **`KNOWLEDGE_COMPILER_LLM_MODEL`**),
@@ -496,7 +513,8 @@ The search layer turns your text into word tokens using the same Unicode-aware
 rules everywhere retrieval, bounded context, and the simple grounded answer use.
 By default the remaining terms are combined with **AND** in FTS; use `--match or`
 for **OR**. After FTS, hits are **reranked** with BM25 score plus a small bonus
-for lexical overlap with the query, then **diversified** so one loud document
+for lexical overlap with the query (unless **`--embed-rerank`** replaces the pool
+order using embedding cosine similarity first), then **diversified** so one loud document
 does not occupy the whole list unless you raise `--max-per-document` or the pool
 is exhausted. Sentence selection for context uses the same token shape on the
 snippet side as the query.
@@ -519,9 +537,9 @@ uv run knowledge-compiler context "deterministic chunking" --limit 3 --max-chars
 This command retrieves evidence, applies a character budget, and writes the
 selected context snippets to the current context state. It can include **more
 than one snippet** when the budget allows (strategy `query-aware-multi-snippet-v2`).
-The CLI also prints a rough **`estimated_input_tokens`** figure (~4 characters
-per token) so you can reason about model context windows alongside the character
-budget.
+The CLI also prints **`estimated_input_tokens`**. With **`tiktoken`** installed
+(default dependency), snippet assembly can honor **`--max-tokens`** using the
+`cl100k_base` encoding; the printed estimate uses the same counter when possible.
 
 ### Inspect
 
@@ -721,8 +739,8 @@ after citation storage was added.
 Retrieval adds **lexical** diversification and per-document caps on top of BM25,
 but there are still **no embeddings** or learned rerankers. Compile-time
 **themes** are keyword overlap clusters, not semantic topics. The `ContextPack`
-reports a **rough token estimate** but budgeting remains **character-first**, not
-a tokenizer-accurate model context planner. There is no broad connector marketplace yet and no web UI yet. **`ask --llm`**
+reports token usage using **tiktoken** when counting snippets, and optional
+**`--max-tokens`** enforces a tokenizer cap alongside characters. There is no broad connector marketplace yet and no web UI yet. **`ask --llm`**
 adds an optional OpenAI-compatible synthesis step; it is not on by default and does
 not replace evidence-first design.
 

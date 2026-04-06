@@ -66,13 +66,41 @@ class WorkspaceStore:
             kept_docs = [d for d in existing_docs if d.source_id != source.source_id]
             kept_chunks = [c for c in existing_chunks if c.provenance.source_id != source.source_id]
 
-            kept_doc_ids = {document.document_id for document in kept_docs}
-            new_docs = [document for document in documents if document.document_id not in kept_doc_ids]
-            new_doc_ids = {document.document_id for document in new_docs}
-            new_chunks = [chunk for chunk in chunks if chunk.document_id in new_doc_ids]
+            old_same_docs = [d for d in existing_docs if d.source_id == source.source_id]
+            old_chunks_by_doc: dict[str, list[Chunk]] = {}
+            for chunk in existing_chunks:
+                if chunk.provenance.source_id == source.source_id:
+                    old_chunks_by_doc.setdefault(chunk.document_id, []).append(chunk)
+            for doc_id in old_chunks_by_doc:
+                old_chunks_by_doc[doc_id].sort(key=lambda c: c.ordinal)
 
-            merged_docs = kept_docs + new_docs
-            merged_chunks = kept_chunks + new_chunks
+            incoming_by_doc: dict[str, list[Chunk]] = {}
+            for chunk in chunks:
+                incoming_by_doc.setdefault(chunk.document_id, []).append(chunk)
+            for doc_id in incoming_by_doc:
+                incoming_by_doc[doc_id].sort(key=lambda c: c.ordinal)
+
+            final_incoming_docs: list[Document] = []
+            final_incoming_chunks: list[Chunk] = []
+            for new_doc in documents:
+                predecessor = next(
+                    (d for d in old_same_docs if d.relative_path == new_doc.relative_path),
+                    None,
+                )
+                if predecessor is not None and predecessor.content_hash == new_doc.content_hash:
+                    final_incoming_docs.append(predecessor)
+                    final_incoming_chunks.extend(old_chunks_by_doc.get(predecessor.document_id, []))
+                else:
+                    final_incoming_docs.append(new_doc)
+                    final_incoming_chunks.extend(incoming_by_doc.get(new_doc.document_id, []))
+
+            kept_doc_ids = {document.document_id for document in kept_docs}
+            deduped_docs = [d for d in final_incoming_docs if d.document_id not in kept_doc_ids]
+            deduped_doc_ids = {d.document_id for d in deduped_docs}
+            deduped_chunks = [c for c in final_incoming_chunks if c.document_id in deduped_doc_ids]
+
+            merged_docs = kept_docs + deduped_docs
+            merged_chunks = kept_chunks + deduped_chunks
             source_ids = tuple(sorted({s.source_id for s in kept_sources}))
             manifest = IngestManifest(
                 source_id=source.source_id,

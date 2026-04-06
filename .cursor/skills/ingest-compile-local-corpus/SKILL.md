@@ -28,7 +28,7 @@ uv run knowledge-compiler index
 ```
 
 To **add** a folder corpus without wiping another source (for example bookmarks
-already ingested), use **`ingest <dir> --merge`**.
+already ingested), use **`ingest <dir> --merge`**. For single pages, **`ingest-url <url> --merge`**.
 
 With an alternate project root:
 

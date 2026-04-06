@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from knowledge_compiler.context.token_counter import clip_text_to_token_budget, count_tokens
 from knowledge_compiler.retrieval.query_tokens import lexical_token_set, query_token_set
 from knowledge_compiler.schemas import ContextPack, ContextSnippet, EvidencePack
 
@@ -15,31 +16,48 @@ class _SnippetCandidate:
     matched_terms: int
 
 
-def _estimate_tokens(text: str) -> int:
-    """Rough heuristic (~4 chars per token for Latin-heavy text)."""
-    return max(1, (len(text) + 3) // 4)
-
-
-def build_context_pack(*, evidence_pack: EvidencePack, max_chars: int) -> ContextPack:
+def build_context_pack(
+    *,
+    evidence_pack: EvidencePack,
+    max_chars: int,
+    max_tokens: int | None = None,
+) -> ContextPack:
     query_terms = query_token_set(evidence_pack.query)
     candidates = _build_candidates(evidence_pack=evidence_pack, query_terms=query_terms)
     snippets: list[ContextSnippet] = []
     used_chars = 0
+    used_tokens = 0
     selected_chunk_ids: list[str] = []
     seen_texts: set[str] = set()
+    strategy = "query-aware-multi-snippet-v2"
+    if max_tokens is not None:
+        strategy = f"{strategy}+token_cap"
 
     for candidate in candidates:
         normalized_candidate = " ".join(candidate.text.split()).casefold()
         if not normalized_candidate or normalized_candidate in seen_texts:
             continue
 
-        remaining = max_chars - used_chars
-        if remaining <= 0:
+        remaining_chars = max_chars - used_chars
+        if remaining_chars <= 0:
             break
 
-        selected_text = candidate.text[:remaining].rstrip()
+        selected_text = candidate.text[:remaining_chars].rstrip()
         if not selected_text:
             continue
+
+        if max_tokens is not None:
+            snippet_tokens = count_tokens(selected_text)
+            overhead = 4
+            room = max_tokens - used_tokens - overhead
+            if room <= 0:
+                break
+            if snippet_tokens > room:
+                selected_text = clip_text_to_token_budget(selected_text, room)
+                snippet_tokens = count_tokens(selected_text)
+            if not selected_text.strip():
+                continue
+            used_tokens += snippet_tokens + overhead
 
         snippets.append(
             ContextSnippet(
@@ -57,22 +75,20 @@ def build_context_pack(*, evidence_pack: EvidencePack, max_chars: int) -> Contex
             selected_chunk_ids.append(candidate.chunk_id)
         used_chars += len(selected_text)
 
-    selected_topics = tuple(
-        topic_id for topic_id in evidence_pack.topic_ids if topic_id
-    )
-    selected_claims = tuple(
-        claim_id for claim_id in evidence_pack.claim_ids if claim_id
-    )
+    selected_topics = tuple(topic_id for topic_id in evidence_pack.topic_ids if topic_id)
+    selected_claims = tuple(claim_id for claim_id in evidence_pack.claim_ids if claim_id)
 
-    token_estimate = sum(_estimate_tokens(s.text) for s in snippets) + 4 * len(snippets)
+    token_estimate = sum(count_tokens(s.text) for s in snippets) + 4 * len(snippets)
 
     return ContextPack(
         query=evidence_pack.query,
         source_hit_count=len(evidence_pack.hits),
-        selection_strategy="query-aware-multi-snippet-v2",
+        selection_strategy=strategy,
         max_chars=max_chars,
         used_chars=used_chars,
         estimated_input_tokens=token_estimate,
+        max_tokens=max_tokens,
+        used_tokens=used_tokens,
         chunk_ids=tuple(selected_chunk_ids),
         topic_ids=selected_topics,
         claim_ids=selected_claims,

@@ -12,6 +12,7 @@ from knowledge_compiler.services import (
     build_query_context,
     compile_workspace,
     ingest_local_files,
+    ingest_urls,
     ingest_x_bookmarks,
     inspect_chunk,
     inspect_topic,
@@ -69,6 +70,36 @@ def ingest(
 
     typer.echo(
         f"Ingested {manifest.document_count} documents and {manifest.chunk_count} chunks into "
+        f"{store.settings.state_dir}."
+    )
+
+
+UrlListArg = Annotated[list[str], typer.Argument(help="One or more http(s) URLs.")]
+
+
+@app.command("ingest-url")
+def ingest_url_command(
+    ctx: typer.Context,
+    urls: UrlListArg,
+    merge: bool = typer.Option(
+        False,
+        "--merge",
+        help="Keep other sources; replace only url-fetch rows for matching paths.",
+    ),
+) -> None:
+    """Fetch http(s) URLs and ingest visible text (HTML stripped like local .html)."""
+    store = _store(ctx)
+    if not urls:
+        typer.echo("Provide at least one URL.")
+        raise typer.Exit(code=1)
+    try:
+        manifest = ingest_urls(urls=tuple(urls), store=store, merge=merge)
+    except (OSError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    typer.echo(
+        f"Ingested {manifest.document_count} URL document(s) and {manifest.chunk_count} chunks into "
         f"{store.settings.state_dir}."
     )
 
@@ -167,6 +198,25 @@ def ask_command(
         max=20,
         help="At most this many chunks per document in the final ranked list.",
     ),
+    max_chars: int = typer.Option(
+        1500,
+        "--max-chars",
+        min=50,
+        max=20000,
+        help="Character budget for context snippets before answering.",
+    ),
+    max_tokens: int | None = typer.Option(
+        None,
+        "--max-tokens",
+        min=50,
+        max=100_000,
+        help="Optional hard token cap (tiktoken cl100k_base when installed).",
+    ),
+    embed_rerank: bool = typer.Option(
+        False,
+        "--embed-rerank",
+        help="Reorder FTS candidates with OpenAI embeddings (requires API key).",
+    ),
     llm: bool = typer.Option(
         False,
         "--llm",
@@ -188,6 +238,12 @@ def ask_command(
                 "Optional: KNOWLEDGE_COMPILER_OPENAI_BASE_URL, KNOWLEDGE_COMPILER_LLM_MODEL."
             )
             raise typer.Exit(code=1)
+    if embed_rerank:
+        import os
+
+        if not os.environ.get("KNOWLEDGE_COMPILER_OPENAI_API_KEY", "").strip():
+            typer.echo("--embed-rerank requires KNOWLEDGE_COMPILER_OPENAI_API_KEY.")
+            raise typer.Exit(code=1)
     try:
         answer = ask_workspace(
             query=query,
@@ -198,6 +254,9 @@ def ask_command(
             max_chunks_per_document=max_per_document,
             use_llm=llm,
             llm_model=llm_model,
+            max_chars=max_chars,
+            max_tokens=max_tokens,
+            embed_rerank=embed_rerank,
         )
     except FileNotFoundError as error:
         typer.echo(str(error))
@@ -244,27 +303,54 @@ def context_command(
         max=20,
         help="At most this many chunks per document in the final ranked list.",
     ),
+    max_tokens: int | None = typer.Option(
+        None,
+        "--max-tokens",
+        min=50,
+        max=100_000,
+        help="Optional token cap for snippets (tiktoken cl100k_base).",
+    ),
+    embed_rerank: bool = typer.Option(
+        False,
+        "--embed-rerank",
+        help="Reorder FTS pool with OpenAI embeddings before diversification.",
+    ),
 ) -> None:
     store = _store(ctx)
+    if embed_rerank:
+        import os
+
+        if not os.environ.get("KNOWLEDGE_COMPILER_OPENAI_API_KEY", "").strip():
+            typer.echo("--embed-rerank requires KNOWLEDGE_COMPILER_OPENAI_API_KEY.")
+            raise typer.Exit(code=1)
     try:
         context_pack = build_query_context(
             query=query,
             store=store,
             limit=limit,
             max_chars=max_chars,
+            max_tokens=max_tokens,
             match_mode=match_mode,
             candidate_pool=candidate_pool,
             max_chunks_per_document=max_per_document,
+            embed_rerank=embed_rerank,
         )
     except FileNotFoundError as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
+    except OSError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
 
     typer.echo(f"Query: {context_pack.query}")
-    typer.echo(
+    budget_line = (
         f"Context budget: {context_pack.used_chars}/{context_pack.max_chars} chars "
-        f"(~{context_pack.estimated_input_tokens} est. tokens)"
+        f"(~{context_pack.estimated_input_tokens} est. tokens"
     )
+    if context_pack.max_tokens is not None:
+        budget_line += f"; token cap {context_pack.used_tokens}/{context_pack.max_tokens}"
+    budget_line += ")"
+    typer.echo(budget_line)
     typer.echo(
         f"Selected chunks: {len(context_pack.chunk_ids)}, topics: {len(context_pack.topic_ids)}, "
         f"claims: {len(context_pack.claim_ids)}"
@@ -305,8 +391,19 @@ def retrieve_command(
         max=20,
         help="At most this many chunks per document in the final ranked list.",
     ),
+    embed_rerank: bool = typer.Option(
+        False,
+        "--embed-rerank",
+        help="Reorder FTS pool with OpenAI embeddings before diversification.",
+    ),
 ) -> None:
     store = _store(ctx)
+    if embed_rerank:
+        import os
+
+        if not os.environ.get("KNOWLEDGE_COMPILER_OPENAI_API_KEY", "").strip():
+            typer.echo("--embed-rerank requires KNOWLEDGE_COMPILER_OPENAI_API_KEY.")
+            raise typer.Exit(code=1)
     try:
         evidence_pack = retrieve_evidence(
             query=query,
@@ -315,8 +412,12 @@ def retrieve_command(
             match_mode=match_mode,
             candidate_pool=candidate_pool,
             max_chunks_per_document=max_per_document,
+            embed_rerank=embed_rerank,
         )
     except FileNotFoundError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    except OSError as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
 

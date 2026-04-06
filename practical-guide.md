@@ -98,7 +98,7 @@ produce empty or wrong answers.
 
 ---
 
-## 5. Ingest: files, HTML, merge, X bookmarks
+## 5. Ingest: files, HTML, URLs, merge, X bookmarks
 
 ### Local folders
 
@@ -109,6 +109,16 @@ uv run knowledge-compiler ingest /path/to/my-notes
 Recursively ingests **`md`**, **`txt`**, **`html`**, **`htm`**. HTML is reduced to
 visible text (script/style stripped); it is not a full “reader mode” cleaner.
 
+### URLs (http/https)
+
+```bash
+uv run knowledge-compiler ingest-url https://example.com/page --merge
+```
+
+Fetches each URL (size-capped), strips HTML like local `.html`, and stores under
+source id **`url-fetch`**. Use **`--merge`** to keep folder or bookmark sources.
+Then **`compile`** and **`index`**.
+
 ### Merge (multi-source workspace)
 
 Default ingest **replaces** the whole `workspace/state/` bundle. To **add** or
@@ -118,10 +128,12 @@ refresh one connector without deleting others:
 uv run knowledge-compiler ingest /path/to/more-notes --merge
 ```
 
-The same **`--merge`** flag exists on **`ingest-x-bookmarks`**. Each source has a
+The same **`--merge`** flag exists on **`ingest-x-bookmarks`** and **`ingest-url`**. Each source has a
 stable `source_id`; merge drops prior rows for *that* id, keeps other sources,
 and skips new documents whose `document_id` already exists (avoids duplicate
-chunk ids).
+chunk ids). When you **`--merge`** the **same** folder (or URL source) again,
+unchanged files (same `relative_path` and `content_hash`) **reuse** existing
+chunks instead of rewriting them.
 
 After merging sources, run **`compile`** and **`index`** on the **combined**
 corpus.
@@ -186,7 +198,9 @@ uv run knowledge-compiler context "your query" --max-chars 1500
 **Retrieve** shows the **`EvidencePack`**: hits, scores, line ranges.
 
 **Context** builds the **`ContextPack`**: the snippets that fit the character
-budget (often **multiple** snippets), plus an **estimated token** hint.
+budget (often **multiple** snippets), plus an **estimated token** hint. You can
+add **`--max-tokens N`** so snippet assembly stops when **tiktoken** (`cl100k_base`)
+counts reach that ceiling (character budget still applies in parallel).
 
 Shared tuning flags (also on **`ask`**):
 
@@ -196,6 +210,7 @@ Shared tuning flags (also on **`ask`**):
 | `--match or` | Any term may match |
 | `--candidate-pool N` | More raw hits before diversify/rerank |
 | `--max-per-document K` | Cap chunks per document in ranked list |
+| `--embed-rerank` | After FTS, reorder the candidate pool with **OpenAI embeddings** (same API key as LLM ask), then run lexical diversify. No vector database—vectors live only in memory for that query. |
 
 Queries are tokenized consistently (Unicode word chars, English stopwords
 dropped). **`retrieve`** is the best debug command when answers look wrong.
@@ -212,6 +227,10 @@ Default **`ask`** stitches a short answer from the **same** context snippets
 using a **deterministic heuristic** (sentence overlap with query terms).
 **Citations** always point to retrieved chunks.
 
+Use **`--max-chars`**, **`--max-tokens`**, and **`--embed-rerank`** on **`ask`** the same
+way as on **`context`** / **`retrieve`** so retrieval and context match your intent
+before synthesis.
+
 Optional **model-assisted wording**:
 
 ```bash
@@ -224,6 +243,9 @@ Uses an OpenAI-compatible **`/v1/chat/completions`** endpoint (override base URL
 with **`KNOWLEDGE_COMPILER_OPENAI_BASE_URL`**). **Citations are unchanged**; only
 the prose is synthesized. `last-answer.json` records **`synthesis`**: `heuristic`,
 `openai-chat`, or `none` when no evidence.
+
+Embedding rerank uses **`/v1/embeddings`** with **`KNOWLEDGE_COMPILER_EMBEDDING_MODEL`**
+(default **`text-embedding-3-small`**).
 
 ---
 
@@ -287,9 +309,10 @@ stored citation ids; run a fresh **`ask`**.
 
 ## 13. Limitations
 
-Retrieval is **lexical** (BM25 + diversification), not embedding search. Context
-budgeting is **character-first** with a rough token estimate, not tokenizer-perfect
-for a specific chat model. Compile is **one topic per document** with simple
+Retrieval is **lexical** (BM25 + diversification) unless you opt into **`--embed-rerank`**
+(in-memory OpenAI embeddings, still no vector DB). Context uses **characters**
+and optional **`--max-tokens`** with **tiktoken**; it is not guaranteed to match every
+vendor tokenizer exactly. Compile is **one topic per document** with simple
 claims; themes and cross-links are **keyword overlap**, not curated ontologies.
 There is **no hosted UI** and **no connector marketplace**—only the connectors
 shipped in this repo.

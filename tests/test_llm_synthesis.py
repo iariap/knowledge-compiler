@@ -25,6 +25,8 @@ def test_synthesize_answer_from_context_parses_chat_completion(monkeypatch: pyte
         max_chars=2000,
         used_chars=50,
         estimated_input_tokens=10,
+        max_tokens=None,
+        used_tokens=0,
         chunk_ids=("c1",),
         topic_ids=(),
         claim_ids=(),

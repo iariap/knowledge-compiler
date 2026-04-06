@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+from knowledge_compiler.retrieval.embedding_rerank import default_embedding_model, embedding_rerank_hits
 from knowledge_compiler.retrieval.query_tokens import MatchMode, query_token_set
 from knowledge_compiler.retrieval.rerank import diversify_hits
 from knowledge_compiler.retrieval.sqlite_index import SqliteChunkIndex
@@ -16,6 +18,7 @@ def retrieve_evidence(
     match_mode: str = "and",
     candidate_pool: int | None = None,
     max_chunks_per_document: int = 2,
+    embed_rerank: bool = False,
 ) -> EvidencePack:
     index_path = store.settings.indexes_dir / "retrieval.db"
     _require_index(index_path)
@@ -25,10 +28,28 @@ def retrieve_evidence(
     pool_size = min(max(pool_size, limit), 200)
 
     index = SqliteChunkIndex(index_path)
-    raw_hits = index.search(query, limit=pool_size, match_mode=mode)
+    raw_hits = list(index.search(query, limit=pool_size, match_mode=mode))
+    pool_fetched = len(raw_hits)
+    ranking_strategy = "bm25_lexical_diversify"
+    if embed_rerank:
+        api_key = os.environ.get("KNOWLEDGE_COMPILER_OPENAI_API_KEY", "").strip()
+        if not api_key:
+            message = "embed_rerank requires KNOWLEDGE_COMPILER_OPENAI_API_KEY."
+            raise OSError(message)
+        from knowledge_compiler.services.llm_synthesis import default_base_url
+
+        raw_hits = embedding_rerank_hits(
+            raw_hits,
+            query=query,
+            api_key=api_key,
+            base_url=default_base_url(),
+            model=default_embedding_model(),
+        )
+        ranking_strategy = "openai_embed+bm25_lexical_diversify"
+
     terms = query_token_set(query)
     ranked = diversify_hits(
-        list(raw_hits),
+        raw_hits,
         query_terms=terms,
         final_limit=limit,
         max_chunks_per_document=max_chunks_per_document,
@@ -62,8 +83,8 @@ def retrieve_evidence(
         topic_ids=topic_ids,
         claim_ids=claim_ids,
         match_mode=match_mode.lower() if match_mode.lower() in ("and", "or") else "and",
-        ranking_strategy="bm25_lexical_diversify",
-        candidate_hits_fetched=len(raw_hits),
+        ranking_strategy=ranking_strategy,
+        candidate_hits_fetched=pool_fetched,
         max_chunks_per_document=max_chunks_per_document,
     )
     store.persist_evidence_pack(evidence_pack)

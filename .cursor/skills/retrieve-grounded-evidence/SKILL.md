@@ -30,8 +30,9 @@ uv run knowledge-compiler -p /path/to/project-root retrieve "<query>"
 ```
 
 Optional retrieval tuning: **`--match and|or`** (FTS term combination),
-**`--candidate-pool N`**, **`--max-per-document K`** (diversification). Defaults
-match the README.
+**`--candidate-pool N`**, **`--max-per-document K`** (diversification), **`--embed-rerank`**
+(OpenAI embeddings + cosine reorder; requires **`KNOWLEDGE_COMPILER_OPENAI_API_KEY`**).
+Defaults match the README.
 
 ## What it gives you
 

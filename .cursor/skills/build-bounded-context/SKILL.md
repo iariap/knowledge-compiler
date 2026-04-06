@@ -36,8 +36,9 @@ uv run knowledge-compiler -p /path/to/project-root context "<query>" --max-chars
 ```
 
 The same retrieval flags as **`retrieve`** apply (`--match`, `--candidate-pool`,
-`--max-per-document`). Output includes **estimated tokens** (rough heuristic) next
-to the character budget.
+`--max-per-document`, `--embed-rerank`). Use **`--max-tokens`** for a tiktoken-based
+cap alongside **`--max-chars`**. Output includes **estimated tokens** next to the
+character budget.
 
 ## What it does
 

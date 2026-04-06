@@ -11,9 +11,11 @@ def build_query_context(
     store: WorkspaceStore,
     limit: int = 5,
     max_chars: int = 1_500,
+    max_tokens: int | None = None,
     match_mode: str = "and",
     candidate_pool: int | None = None,
     max_chunks_per_document: int = 2,
+    embed_rerank: bool = False,
 ) -> ContextPack:
     evidence_pack = retrieve_evidence(
         query=query,
@@ -22,8 +24,13 @@ def build_query_context(
         match_mode=match_mode,
         candidate_pool=candidate_pool,
         max_chunks_per_document=max_chunks_per_document,
+        embed_rerank=embed_rerank,
     )
-    context_pack = build_context_pack(evidence_pack=evidence_pack, max_chars=max_chars)
+    context_pack = build_context_pack(
+        evidence_pack=evidence_pack,
+        max_chars=max_chars,
+        max_tokens=max_tokens,
+    )
     store.persist_context_pack(context_pack)
     record_context_run(context_pack=context_pack, store=store)
     return context_pack

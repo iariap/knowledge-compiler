@@ -16,14 +16,20 @@ def ask_workspace(
     max_chunks_per_document: int = 2,
     use_llm: bool = False,
     llm_model: str | None = None,
+    max_chars: int = 1_500,
+    max_tokens: int | None = None,
+    embed_rerank: bool = False,
 ) -> QueryAnswer:
     context_pack = build_query_context(
         query=query,
         store=store,
         limit=limit,
+        max_chars=max_chars,
+        max_tokens=max_tokens,
         match_mode=match_mode,
         candidate_pool=candidate_pool,
         max_chunks_per_document=max_chunks_per_document,
+        embed_rerank=embed_rerank,
     )
     hits = context_pack.snippets
 

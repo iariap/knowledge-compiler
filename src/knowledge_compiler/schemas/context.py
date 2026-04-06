@@ -22,6 +22,8 @@ class ContextPack(BaseModel):
     max_chars: int
     used_chars: int
     estimated_input_tokens: int = 0
+    max_tokens: int | None = None
+    used_tokens: int = 0
     chunk_ids: tuple[str, ...]
     topic_ids: tuple[str, ...] = ()
     claim_ids: tuple[str, ...] = ()
