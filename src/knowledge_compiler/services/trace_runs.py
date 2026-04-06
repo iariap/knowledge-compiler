@@ -54,5 +54,6 @@ def trace_ask_run(*, store: WorkspaceStore, run_id: str) -> AnswerTrace:
         answer_text=run.answer_text or run.answer_preview or "",
         citations=tuple(citations),
         evidence=(),
+        synthesis="heuristic",
     )
     return AnswerTrace(answer=answer, cited_chunks=tuple(cited_chunks))

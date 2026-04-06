@@ -1,6 +1,7 @@
 from knowledge_compiler.retrieval.query_tokens import lexical_token_set, query_token_set
 from knowledge_compiler.schemas import AnswerCitation, ContextPack, QueryAnswer
 from knowledge_compiler.services.context import build_query_context
+from knowledge_compiler.services.llm_synthesis import synthesize_answer_from_context
 from knowledge_compiler.services.runs import record_ask_run
 from knowledge_compiler.storage import WorkspaceStore
 
@@ -13,6 +14,8 @@ def ask_workspace(
     match_mode: str = "and",
     candidate_pool: int | None = None,
     max_chunks_per_document: int = 2,
+    use_llm: bool = False,
+    llm_model: str | None = None,
 ) -> QueryAnswer:
     context_pack = build_query_context(
         query=query,
@@ -30,14 +33,26 @@ def ask_workspace(
             answer_text="No grounded evidence was found for that query in the current workspace.",
             citations=(),
             evidence=(),
+            synthesis="none",
         )
         store.persist_query_answer(answer)
         record_ask_run(answer=answer, store=store, context_pack=context_pack)
         return answer
 
+    if use_llm:
+        answer_text = synthesize_answer_from_context(
+            query=query,
+            context_pack=context_pack,
+            model=llm_model,
+        )
+        synthesis = "openai-chat"
+    else:
+        answer_text = _build_grounded_answer(query=query, context_pack=context_pack)
+        synthesis = "heuristic"
+
     answer = QueryAnswer(
         query=query,
-        answer_text=_build_grounded_answer(query=query, context_pack=context_pack),
+        answer_text=answer_text,
         citations=tuple(
             AnswerCitation(
                 chunk_id=hit.chunk_id,
@@ -48,6 +63,7 @@ def ask_workspace(
             for hit in hits
         ),
         evidence=(),
+        synthesis=synthesis,
     )
     store.persist_query_answer(answer)
     record_ask_run(answer=answer, store=store, context_pack=context_pack)

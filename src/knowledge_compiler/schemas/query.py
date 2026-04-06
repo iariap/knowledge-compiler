@@ -29,3 +29,4 @@ class QueryAnswer(BaseModel):
     answer_text: str
     citations: tuple[AnswerCitation, ...]
     evidence: tuple[SearchHit, ...]
+    synthesis: str = "heuristic"

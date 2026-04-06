@@ -459,6 +459,13 @@ before diversification (default scales with `--limit`). `--max-per-document K`
 caps how many chunks from the same source document appear in the final ranked
 list (default **2**), then the tool may backfill if the list is still short.
 
+**Optional LLM wording.** With **`KNOWLEDGE_COMPILER_OPENAI_API_KEY`** set (and
+optional **`KNOWLEDGE_COMPILER_OPENAI_BASE_URL`** / **`KNOWLEDGE_COMPILER_LLM_MODEL`**),
+`ask --llm` sends the same context snippets to an OpenAI-compatible
+`/v1/chat/completions` endpoint. Citations still come from the retrieved chunks;
+only the prose is model-generated. Default `ask` remains a small deterministic
+heuristic over the same snippets.
+
 If the index is missing, build it first:
 
 ```bash
@@ -714,8 +721,9 @@ Retrieval adds **lexical** diversification and per-document caps on top of BM25,
 but there are still **no embeddings** or learned rerankers. Compile-time
 **themes** are keyword overlap clusters, not semantic topics. The `ContextPack`
 reports a **rough token estimate** but budgeting remains **character-first**, not
-a tokenizer-accurate model context planner. There is no broad connector
-marketplace yet, no web UI yet, and no LLM-backed synthesis layer yet.
+a tokenizer-accurate model context planner. There is no broad connector marketplace yet and no web UI yet. **`ask --llm`**
+adds an optional OpenAI-compatible synthesis step; it is not on by default and does
+not replace evidence-first design.
 
 ## What We Are Not Doing Yet
 

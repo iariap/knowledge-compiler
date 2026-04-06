@@ -167,8 +167,27 @@ def ask_command(
         max=20,
         help="At most this many chunks per document in the final ranked list.",
     ),
+    llm: bool = typer.Option(
+        False,
+        "--llm",
+        help="Synthesize wording via OpenAI-compatible /v1/chat/completions (requires API key).",
+    ),
+    llm_model: str | None = typer.Option(
+        None,
+        "--llm-model",
+        help="Chat model id (default: KNOWLEDGE_COMPILER_LLM_MODEL or gpt-4o-mini).",
+    ),
 ) -> None:
     store = _store(ctx)
+    if llm:
+        from knowledge_compiler.services.llm_synthesis import llm_synthesis_enabled
+
+        if not llm_synthesis_enabled():
+            typer.echo(
+                "LLM mode requires KNOWLEDGE_COMPILER_OPENAI_API_KEY. "
+                "Optional: KNOWLEDGE_COMPILER_OPENAI_BASE_URL, KNOWLEDGE_COMPILER_LLM_MODEL."
+            )
+            raise typer.Exit(code=1)
     try:
         answer = ask_workspace(
             query=query,
@@ -177,12 +196,20 @@ def ask_command(
             match_mode=match_mode,
             candidate_pool=candidate_pool,
             max_chunks_per_document=max_per_document,
+            use_llm=llm,
+            llm_model=llm_model,
         )
     except FileNotFoundError as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
+    except (OSError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
 
     typer.echo(answer.answer_text)
+    if answer.synthesis == "openai-chat":
+        typer.echo("")
+        typer.echo("(Answer synthesis: OpenAI-compatible chat; citations unchanged.)")
     if answer.citations:
         typer.echo("")
         typer.echo("Citations:")
