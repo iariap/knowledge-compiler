@@ -95,7 +95,7 @@ class XApiClient:
         params: dict[str, str] = {
             "max_results": str(max(1, min(100, max_results))),
             "expansions": "author_id",
-            "tweet.fields": "created_at,author_id,text",
+            "tweet.fields": "created_at,author_id,text,note_tweet",
             "user.fields": "username,name",
         }
         if pagination_token:
@@ -147,7 +147,14 @@ def _parse_bookmarks_payload(payload: dict[str, Any]) -> list[_TweetPayload]:
     for item in payload.get("data") or []:
         tweet_id = item.get("id")
         text = item.get("text")
-        if tweet_id is None or text is None:
+        if tweet_id is None:
+            continue
+        note_obj = item.get("note_tweet")
+        if isinstance(note_obj, dict):
+            note_text = note_obj.get("text")
+            if isinstance(note_text, str) and note_text.strip():
+                text = note_text
+        if text is None:
             continue
         author_id = item.get("author_id")
         author_id_s = str(author_id) if author_id is not None else None

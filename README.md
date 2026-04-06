@@ -356,11 +356,11 @@ without downloading the heavy account archive export. The tool calls X API v2
 bookmark into a small text document (post text, author metadata, link), and runs
 the usual chunking pipeline.
 
-**Text length and cropping.** The ingested **body** is whatever X returns in the
-tweet `text` field for each bookmark; this project does not shorten that string.
-Very long posts may still appear **truncated in the API response** unless X
-exposes full text through additional fields (for example long-form / note
-payloads—the current connector requests `tweet.fields=text` only). Separately,
+**Text length and cropping.** Bookmarks requests include **`tweet.fields=…,note_tweet`**.
+When X returns a **`note_tweet`** object with `text`, that string is used as the
+post body (long notes); otherwise the regular `text` field is used. This project
+does not shorten either string. If both are missing or truncated by the platform,
+there is nothing further to fetch at this layer. Separately,
 the **topic title** derived from a bookmark is capped at about **80 characters**
 for stable filenames and manifests; full text remains in chunks. After compile,
 the **topic summary** in artifacts is a short excerpt (~240 characters) from the

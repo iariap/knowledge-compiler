@@ -166,10 +166,10 @@ bien configuradas. El Bearer “solo aplicación” tampoco vale. El tool llama 
 API por HTTPS, arma un documento por post guardado y lo parte en chunks como el
 resto de fuentes.
 
-**Texto completo vs recortes.** El cuerpo guardado por post es el `text` que
-devuelve la API para ese bookmark; el ingest **no** recorta ese campo. Aun así,
-X a veces entrega **texto acortado** en posts muy largos si no pides campos extra
-de long-form (el conector actual solo pide `text` estándar). El **título** del
+**Texto completo vs recortes.** Si la API devuelve **`note_tweet.text`**, ese es el
+cuerpo guardado; si no, se usa el `text` normal del post. El ingest **no** recorta
+esos campos. Aun así, X puede seguir entregando texto acortado según el tipo de
+post o la cuenta. El **título** del
 tema en compile sí se acorta (~80 caracteres) para nombres de archivo; el texto
 completo sigue en los chunks. El **resumen** del topic en compile es un extracto
 corto (~240 caracteres), no el post entero. En `context` y `ask` solo verás

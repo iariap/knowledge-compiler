@@ -92,6 +92,27 @@ def test_ingest_x_bookmarks_persists_bookmark_posts(tmp_path: Path) -> None:
     assert "alice" in store.load_chunks()[0].text.lower()
 
 
+def test_parse_bookmarks_prefers_note_tweet_text_when_present() -> None:
+    payload = {
+        "data": [
+            {
+                "id": "tweet-note",
+                "text": "Short card text…",
+                "author_id": "99",
+                "note_tweet": {"text": "Full long-form note body with more detail than the card."},
+            }
+        ],
+        "includes": {"users": [{"id": "99", "username": "bob", "name": "Bob"}]},
+        "meta": {"result_count": 1},
+    }
+    from knowledge_compiler.connectors import x_bookmarks as xb
+
+    rows = xb._parse_bookmarks_payload(payload)
+    assert len(rows) == 1
+    assert "Full long-form note body" in rows[0].text
+    assert rows[0].text.startswith("Full long-form")
+
+
 def test_cli_ingest_x_bookmarks_invokes_service(tmp_path: Path) -> None:
     runner = CliRunner()
     with patch("knowledge_compiler.cli.ingest_x_bookmarks") as mocked:
