@@ -11,8 +11,8 @@ file is for day-to-day use.**
 
 ## Contents
 
-1. [What you are building](#1-what-you-are-building)
-2. [Install and first run](#2-install-and-first-run)
+1. [What you are building](#1-what-you-are-building) — includes [what “KG” means](#what-is-a-knowledge-graph-kg)
+2. [Install and first run](#2-install-and-first-run) — includes [example teaching workflow](#example-workflow-for-teaching)
 3. [Project root and `workspace/`](#3-project-root-and-workspace)
 4. [End-to-end pipeline](#4-end-to-end-pipeline)
 5. [Ingest: files, HTML, merge, X bookmarks](#5-ingest-files-html-merge-x-bookmarks)
@@ -29,6 +29,22 @@ file is for day-to-day use.**
 ---
 
 ## 1. What you are building
+
+### What is a knowledge graph (KG)?
+
+A **knowledge graph** is a way of representing information as **things** (often
+called entities or nodes) connected by **typed relationships** (edges). Unlike a
+single long document, a KG makes structure explicit: you can say “this topic
+*contains* this claim,” “this topic is *lexically related to* that topic,” or
+“this answer is *supported by* this evidence chunk,” and you can follow those
+links when you inspect or debug the system.
+
+In research and industry, “KG” sometimes implies huge graphs, semantic web
+standards, or machine learning pipelines. Here it means the same **idea**
+—nodes and relations you can traverse—at a **small, local** scale: your compiled
+artifacts are the graph, and the CLI is how you build it and query it honestly.
+
+### In this tool, that means…
 
 The tool turns sources into **stable chunks** with provenance, compiles a first
 layer of **topics and claims**, links **relations** (within topics and across
@@ -60,6 +76,49 @@ uv run knowledge-compiler runs
 ```
 
 That sequence teaches the pipeline: **evidence → context → answer → proof**.
+
+### Example workflow for teaching
+
+Use this when you are walking someone through the tool for the first time; it
+stays entirely on the **fixture corpus** shipped with the repo so everyone sees
+the same files and the same plausible answers.
+
+Have learners run the commands in order and pause after each block to open the
+artifact that changed. The goal is not memorizing flags—it is seeing **how each
+stage constrains the next**, which is what “grounded KG” practice looks like.
+
+**1. Environment.** From the repository root, run `uv sync`, then show that the
+CLI resolves with `uv run knowledge-compiler --help`.
+
+**2. Build the graph (batch).** Run `ingest`, `compile`, and `index` on
+`tests/fixtures/input` as in the block above. Open `workspace/state/chunks.jsonl`
+and point out one line: that is a **node** of evidence with a stable id and
+provenance. Open `workspace/compiled/topics.json` and explain that each row is a
+**topic node** tied to chunks. Skim one file under `workspace/compiled/topics/`
+to connect the human-readable page to those ids.
+
+**3. Show retrieval as a separate decision.** Run `retrieve "deterministic chunking"`.
+Emphasize that nothing has been “answered” yet—this step only says which chunks
+scored highly and what topics/claims overlap. If you delete or break
+`workspace/indexes/retrieval.db` and repeat, the command fails until `index` is
+run again; that reinforces that the KG’s **searchable layer** is explicit and
+rebuildable.
+
+**4. Show context as a budget, not the whole corpus.** Run
+`context "deterministic chunking" --max-chars 400` and compare the output to
+`retrieve` for the same query. The graph is the same; the **pack** is the slice
+you allow downstream code (or a model) to see.
+
+**5. Answer and then audit.** Run `ask "deterministic chunking"`, then immediately
+`trace`. The teaching point is simple: the answer text is cheap to doubt; the
+**cited chunk bodies** in `trace` are the accountability bridge back to source
+lines. Optionally run `runs` and `trace --run <id>` so the room sees that history
+can be replayed, not only the latest `last-answer.json`.
+
+**6. Optional stretch.** If the audience is comfortable, repeat `retrieve` with
+`--match or` or `--embed-rerank` (with an API key) and compare hit ordering—same
+KG, different **retrieval policy**—or mention `ingest-url` / `--merge` as ways to
+grow the corpus without throwing away prior sources.
 
 ---
 
