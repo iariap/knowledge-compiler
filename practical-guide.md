@@ -16,7 +16,7 @@ file is for day-to-day use.**
 3. [Project root and `workspace/`](#3-project-root-and-workspace)
 4. [End-to-end pipeline](#4-end-to-end-pipeline)
 5. [Ingest: files, HTML, merge, X bookmarks](#5-ingest-files-html-merge-x-bookmarks)
-6. [Compile and index](#6-compile-and-index)
+6. [Compile and index](#6-compile-and-index) — includes [what SQLite FTS is](#what-is-sqlite-fts-and-fts5)
 7. [The compiled graph](#7-the-compiled-graph)
 8. [Querying: retrieve and context](#8-querying-retrieve-and-context)
 9. [Ask: heuristic vs LLM](#9-ask-heuristic-vs-llm)
@@ -229,6 +229,30 @@ topics overlap enough. Counts and metadata live in **`compile-manifest.json`**.
 
 **Index** rebuilds **`workspace/indexes/retrieval.db`** (FTS5). Treat it as
 disposable.
+
+### What is SQLite FTS (and FTS5)?
+
+**FTS** means **Full-Text Search** inside **SQLite**: the database keeps an
+**inverted index** of words (tokens) found in your chunk text, so queries can
+find matching rows quickly using **`MATCH`**-style search instead of scanning
+every chunk with a naive substring filter.
+
+**FTS5** is the current SQLite full-text module. This project stores indexed
+chunk text there so **`retrieve`**, **`context`**, and **`ask`** share one
+**local** search layer: no separate search server, and you can delete
+**`retrieval.db`** and rebuild it anytime with **`index`**.
+
+FTS search is **lexical**: it cares about **which terms appear** (and how you
+combine them—see **`--match and`** vs **`--or`**), not about “meaning” in the
+embedding sense. Ranking uses the engine’s relevance scoring (BM25-style in
+practice for FTS5), then this tool may **rerank** or **diversify** hits (lexical
+overlap, per-document caps, optional **embedding** reordering) on top of that
+list.
+
+So when the booklet says “FTS” or “lexical retrieval,” read it as: **word-level
+search in SQLite**, fast and inspectable, with citations still pointing to real
+chunks—not as a semantic or neural retrieval stack unless you opt into
+**`--embed-rerank`**.
 
 ---
 
